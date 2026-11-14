@@ -11,6 +11,7 @@ import { timeAgo } from "@/lib/format";
 import { granulesBbox } from "@/lib/api";
 import type { CachedSummary, Health, RunState, TileInfo } from "@/lib/types";
 import type { GranuleExplorerResponse } from "@/lib/types";
+import type { AreaLayers } from "./useAreaLayers";
 
 /** one tile of an area scan (the Range box's tiles, scanned one after another) */
 export interface AreaTile {
@@ -31,6 +32,8 @@ export interface AreaScanProps {
   onScan: () => void;
   onStop: () => void;
   onOpen: (bundleId: string) => void;
+  /** draw one result layer from every finished tile at once */
+  layers?: AreaLayers;
 }
 
 export interface ScanPanelProps {
@@ -117,7 +120,58 @@ function AreaScan(props: ScanPanelProps & { area: AreaScanProps }) {
               Stop after the current tile
             </button>
           )}
+          {a.layers && doneN > 0 && <AreaLayerPicker layers={a.layers} />}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Pick one result layer and see it on the map for every finished tile, not just the one that is open. */
+function AreaLayerPicker({ layers }: { layers: AreaLayers }) {
+  const { choices, selected, progress } = layers;
+  const val = selected ? `${selected.pipeline}::${selected.layer}` : "";
+  return (
+    <div className="mt-3 border-t border-[#f0ece4] pt-2" data-testid="area-layers">
+      <p className="text-[11px] font-semibold text-[#1c1a17]">Show every scanned tile on the map</p>
+      {choices.length === 0 ? (
+        <p className="mt-1 text-[11px] text-[#8a837b]">
+          {layers.error ? `Could not read the layer list: ${layers.error}` : "reading which layers the scan produced…"}
+        </p>
+      ) : (
+        <>
+          <select
+            value={val}
+            onChange={(e) => {
+              const [pipeline, layer] = e.target.value.split("::");
+              layers.select(pipeline && layer ? { pipeline, layer } : null);
+            }}
+            aria-label="Layer to draw for every tile"
+            className="mt-1 w-full rounded-md border border-[#e2ddd2] bg-[#f3efe7] px-2 py-1 text-[11px] text-[#1c1a17]"
+          >
+            <option value="">Choose a layer…</option>
+            {choices.map((c) => (
+              <option key={`${c.pipeline}::${c.layer}`} value={`${c.pipeline}::${c.layer}`}>{c.pipeline} · {c.layer}</option>
+            ))}
+          </select>
+          {progress && (
+            <p className="mt-1 flex items-center gap-2 text-[11px] text-[#4a443c]" role="status" aria-live="polite">
+              {progress.drawn} of {progress.total} tiles drawn
+              {progress.unavailable > 0 && <> · {progress.unavailable} without this layer</>}
+              {progress.pending > 0 && <Dots className="text-[8px] text-[#8a837b]" />}
+            </p>
+          )}
+          {selected && (
+            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-[#4a443c]">
+              <label className="flex flex-1 items-center gap-2">
+                opacity
+                <input type="range" min={0.2} max={1} step={0.05} value={layers.opacity}
+                  onChange={(e) => layers.setOpacity(Number(e.target.value))} aria-label="Overlay opacity" className="flex-1" />
+              </label>
+              <button type="button" onClick={() => layers.select(null)} className="underline">Hide</button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

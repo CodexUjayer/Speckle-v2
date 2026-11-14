@@ -6,6 +6,7 @@
  *  reported a number yet, the bar says so (it slides, it does not pretend to a percentage).
  *  `ScanStatusStrip` draws it, in the light left panel or on the dark dock. */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Dots } from "@/components/BigLoader";
 import { fmtDur, plainStage } from "./ScanPanel";
 import type { RunState } from "@/lib/types";
 import type { AreaTile } from "./ScanPanel";
@@ -147,18 +148,9 @@ function CountUp({ value }: { value: number }) {
   return <>{fmtMb(shown)}</>;
 }
 
-/** four little bars that dance while bytes are arriving, sit flat when nothing is, and go red when stalled */
-function Activity({ flowing, stalled }: { flowing: boolean; stalled: boolean }) {
-  return (
-    <span className="ss-eq" data-flow={flowing ? "1" : "0"} data-stalled={stalled ? "1" : "0"} aria-hidden>
-      <i /><i /><i /><i />
-    </span>
-  );
-}
-
 /** MB/s over the last samples (the engine's own "now" figure at each update) */
 function Spark({ values }: { values: number[] }) {
-  if (values.length < 2) return null;
+  if (values.length < 2 || values.every((v) => v <= 0)) return null;
   const w = 64, h = 18, max = Math.max(0.5, ...values);
   const pts = values.map((v, i) => `${((i / (values.length - 1)) * w).toFixed(1)},${(h - 1 - (v / max) * (h - 3)).toFixed(1)}`).join(" ");
   return (
@@ -198,11 +190,8 @@ export function ScanStatusStrip(props: {
       className={`ss-box ${dark ? "ss-dark" : "ss-light"}`}
     >
       <p className="ss-head">
-        <span className="ss-pulse" aria-hidden />
         <span className="ss-title">{head}</span>
-        {props.onStop && s.tileTotal > 1 && (
-          <button type="button" className="ss-stop" onClick={props.onStop}>Stop after this tile</button>
-        )}
+        <Dots className="ss-dots text-[10px]" />
       </p>
       <p className="ss-facts">{facts}</p>
       <div
@@ -214,7 +203,6 @@ export function ScanStatusStrip(props: {
       </div>
       {s.mb != null && (
         <div className="ss-data" data-testid="scan-data">
-          <Activity flowing={flowing} stalled={s.stalled} />
           <span className="ss-mb"><CountUp value={s.mb} /></span>
           <span className="ss-mbl">downloaded</span>
           <span className="ss-grow" />
@@ -229,6 +217,9 @@ export function ScanStatusStrip(props: {
       )}
       {extra && <p className="ss-note">{extra}</p>}
       {props.note && <p className="ss-note">{props.note}</p>}
+      {props.onStop && s.tileTotal > 1 && (
+        <button type="button" className="ss-stop" onClick={props.onStop}>Stop after this tile</button>
+      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import Legend, { MapKey } from "./Legend";
 import AreasPanel from "./AreasPanel";
 import ScanPanel from "./ScanPanel";
 import { ScanStatusStrip, scanStatusFrom, useScanTraffic } from "./ScanStatus";
+import { useAreaLayers } from "./useAreaLayers";
 import FindingsPanel, { type LayerSource } from "./FindingsPanel";
 import { verdictUseFrom } from "@/lib/verdictUse";
 import DataPanel from "./DataPanel";
@@ -135,6 +136,7 @@ export default function GlobeApp() {
   const [queue, setQueue] = useState<AreaTile[] | null>(null);
   const queueRef = useRef<AreaTile[] | null>(null);
   const stopRef = useRef(false);
+  const areaLayers = useAreaLayers(queue);
   const updateQueue = useCallback((fn: (q: AreaTile[]) => AreaTile[]) => {
     if (!queueRef.current) return;
     queueRef.current = fn(queueRef.current);
@@ -664,9 +666,10 @@ export default function GlobeApp() {
       const entry = layerCache.current.get(`${resultsRunId ? "live" : "cached"}|${sourceId}|${o.pipeline}|${o.layer}`);
       if (entry) specs.push({ id: `overlay:${key}`, dataUrl: entry.dataUrl, bounds: entry.bounds, opacity: o.opacity });
     }
+    specs.push(...areaLayers.specs);           // one layer from every finished tile of an area scan
     if (sarSpec) specs.push(sarSpec);          // a SAR image of a selected granule sits on top
     return specs;
-  }, [overlays, resultsRunId, cachedResults, sarSpec]);
+  }, [overlays, resultsRunId, cachedResults, sarSpec, areaLayers.specs]);
 
   const pins: { tile: string; lon: number; lat: number; tier: string; label: string }[] = useMemo(() => {
     const out: { tile: string; lon: number; lat: number; tier: string; label: string }[] = [];
@@ -835,7 +838,7 @@ export default function GlobeApp() {
     setOverlayErrors({});
   }, []);
 
-  const activeOverlayLegend = useMemo(() => {
+  const openOverlayLegend = useMemo(() => {
     const keys = Object.keys(overlays);
     if (keys.length === 0) return null;
     const key = lastOverlayOrder.current[lastOverlayOrder.current.length - 1] ?? keys[keys.length - 1];
@@ -846,6 +849,10 @@ export default function GlobeApp() {
     const entry = layerCache.current.get(`${resultsRunId ? "live" : "cached"}|${sourceId}|${o.pipeline}|${o.layer}`);
     return entry ? { layer: entry.payload, opacity: o.opacity } : null;
   }, [overlays, resultsRunId, cachedResults]);
+  const activeOverlayLegend = useMemo(
+    () => openOverlayLegend ?? (areaLayers.legend ? { layer: areaLayers.legend, opacity: areaLayers.opacity } : null),
+    [openOverlayLegend, areaLayers.legend, areaLayers.opacity],
+  );
 
   useEffect(() => {
     const el = legendRef.current;
@@ -1011,6 +1018,7 @@ export default function GlobeApp() {
             onScan: startAreaScan,
             onStop: () => { stopRef.current = true; },
             onOpen: openCachedResult,
+            layers: areaLayers,
           }}
           onOpenResult={(id) => (scanRunId && id === scanRunId ? openRunResult(id) : openCachedResult(id))}
           onOpenDataTab={openData}
