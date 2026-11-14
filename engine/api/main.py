@@ -1,27 +1,9 @@
+
 """5 — FastAPI app entrypoint.
 
-    python -m uvicorn engine.api.main:app --port 8900
+    python -m uvicorn engine.api.main:app --host 0.0.0.0 --port 8900
 
-Serving slice for the unified UI (docs/IMPLEMENTATION_PLAN.md 10 + the port design's API set):
-    GET  /api/health                   presence-only health (+ scan/credential/cache/granule flags)
-    GET  /api/pipelines                manifest catalogue + implemented flag + lanes
-    GET  /api/bundles[/{id}]           ingested SceneBundles (metadata only)
-    GET  /api/tiles[/{id}/verdicts]    canonical verdicts from verdicts.db (4.5)
-    GET  /api/events                   live ComCat context (R1 adapter)
-    POST /api/runs                     start a single-flight run (normal lane inline, heavy via jobs)
-    GET  /api/runs[/{id}]              run state + PipelineResults (slim=1: layer metadata only)
-    GET  /api/runs/{id}/layers/{name}  evidence layer payload (b64 + bounds) — deprecated, first match
-    GET  /api/runs/{id}/pipelines/{p}/layers/{name}   pipeline-scoped layer payload (D5)
-    GET  /api/jobs/{id}                heavy-lane job state (progress + cache)
-    GET  /api/tile-at                  lat/lon -> the MGRS tile that contains it (§5.2)
-    POST /api/scans                    scan one tile by location (§5.3; NISAR_ENABLE_SCANS=1)
-    GET  /api/granules                 granule availability: per-tile (lon/lat, §5.5) or bbox
-                                       (west/south/east/north, globe task E8 — the Granule
-                                       Explorer; antimeridian box -> 400, 429 + Retry-After);
-                                       metadata only
-    GET  /api/background/*             background routes (UI-build-2 §4.5/§5/§6), no access key:
-                                       granule / preview / probe / stack-pair + run
-                                       preprocessing traces and per-pipeline detail
+Serving slice for the unified UI.
 """
 from __future__ import annotations
 
@@ -46,50 +28,102 @@ from .routes_runs import router as runs_router
 from .routes_scanner import router as scanner_router
 from .routes_tiles import router as tiles_router
 
-# Without a root handler every INFO line from nisar.* (scan steps, ASF search, byte heartbeat) is dropped.
-# NISAR_LOG_LEVEL=WARNING restores the old quiet behaviour.
-if not logging.getLogger().handlers:
-    logging.basicConfig(level=os.environ.get("NISAR_LOG_LEVEL", "INFO").upper(),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 
-_LOCAL_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+# Logging configuration
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=os.environ.get("NISAR_LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
+# Allowed frontend origins
+_LOCAL_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+
+    # Production Vercel deployments
+    "https://speckle-v2.vercel.app",
+    "https://dancing-with-sa-rs-yvro.vercel.app",
+]
 
 
 def _ui_origins() -> list[str]:
-    """D9: the two local dev origins plus NISAR_UI_ORIGINS (comma-separated). No wildcard —
-    the engine API can start scans, so an open CORS policy would be an abuse vector."""
-    extra = [o.strip() for o in os.environ.get("NISAR_UI_ORIGINS", "").split(",") if o.strip()]
-    out: list[str] = []
-    for o in [*extra, *_LOCAL_ORIGINS]:
-        if o not in out:
-            out.append(o)
-    return out
+    """Return unique allowed frontend origins.
+
+    Supports additional production/preview origins through
+    NISAR_UI_ORIGINS (comma-separated).
+    """
+    extra = [
+        origin.strip().rstrip("/")
+        for origin in os.environ.get(
+            "NISAR_UI_ORIGINS", ""
+        ).split(",")
+        if origin.strip()
+    ]
+
+    origins = []
+
+    for origin in [*extra, *_LOCAL_ORIGINS]:
+        if origin not in origins:
+            origins.append(origin)
+
+    return origins
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="speckle", version="0.1.0")
+    app = FastAPI(
+        title="speckle",
+        version="0.1.0",
+    )
 
-    # Catch-all INSIDE the CORS layer (added before it): an unexpected exception becomes a readable JSON 500 that
-    # still carries CORS headers. Outside it the browser only ever saw "Failed to fetch" and the cause was hidden.
+    # Exception handler middleware.
+    # Keeps unexpected errors readable and allows CORS middleware
+    # to attach headers to generated 500 responses.
     @app.middleware("http")
     async def _readable_500(request, call_next):
         try:
             return await call_next(request)
-        except Exception as ex:                                   # noqa: BLE001 — reported, not swallowed
+
+        except Exception as ex:
             from fastapi.responses import JSONResponse
-            logging.getLogger("nisar.api").exception("unhandled error on %s %s", request.method, request.url.path)
-            return JSONResponse(status_code=500, content={"detail": {
-                "ok": False, "error": f"engine error: {type(ex).__name__}: {ex}"}})
+
+            logging.getLogger("nisar.api").exception(
+                "unhandled error on %s %s",
+                request.method,
+                request.url.path,
+            )
+
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": {
+                        "ok": False,
+                        "error": (
+                            f"engine error: "
+                            f"{type(ex).__name__}: {ex}"
+                        ),
+                    }
+                },
+            )
+
+    # CORS configuration
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_ui_origins(),
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
-        # Cross-origin, a browser only lets the UI read CORS-safelisted response headers unless they are listed
-        # here. X-Img-Meta carries the preview's corners_lonlat / lo / hi / unit (without it the UI sees "{}" and
-        # draws nothing); Retry-After drives the rate-limit wait; Content-Disposition names the downloads.
-        expose_headers=["X-Img-Meta", "Retry-After", "Content-Disposition", "Content-Range"],
+        expose_headers=[
+            "X-Img-Meta",
+            "Retry-After",
+            "Content-Disposition",
+            "Content-Range",
+        ],
     )
+
+    # API routers
     app.include_router(pipelines_router)
     app.include_router(bundles_router)
     app.include_router(tiles_router)
@@ -101,48 +135,104 @@ def create_app() -> FastAPI:
     app.include_router(retrievals_router)
     app.include_router(settings_router)
 
+    # Health endpoint
     @app.get("/api/health")
     def health():
         data_dir = data_root()
         bundles_dir = Registry().bundles_dir
+
         cache_enabled = True
         cache_reason = None
+
         try:
             from .state import get_runner
+
             cache = get_runner().cache
-            cache_enabled, cache_reason = cache.enabled, cache.disabled_reason
-        except Exception as ex:  # a broken singleton must not take health down
-            cache_enabled, cache_reason = False, f"{type(ex).__name__}: {ex}"
+            cache_enabled = cache.enabled
+            cache_reason = cache.disabled_reason
+
+        except Exception as ex:
+            cache_enabled = False
+            cache_reason = (
+                f"{type(ex).__name__}: {ex}"
+            )
+
         try:
             from engine.common.sqlite_util import resolve_db_dir
+
             db_dir = str(resolve_db_dir(data_dir))
+
         except Exception as ex:
-            db_dir = f"unavailable: {type(ex).__name__}: {ex}"
-        creds = "present" if earthdata_present() else "absent"
-        try:                                      # answers without touching the worker pool
+            db_dir = (
+                f"unavailable: {type(ex).__name__}: {ex}"
+            )
+
+        # Earthdata credentials
+        creds = (
+            "present"
+            if earthdata_present()
+            else "absent"
+        )
+
+        # Runner status
+        try:
             from .state import get_runner
+
             busy = get_runner().busy()
+
         except Exception:
             busy = None
+
+        # Granule search status
         granule_search = {
-            "status": "enabled" if creds == "present" else "disabled",
-            "reason": None if creds == "present" else
-            "Earthdata credentials absent — ASF search needs EARTHDATA_TOKEN (or EARTHDATA_USERNAME + EARTHDATA_PASSWORD)",
+            "status": (
+                "enabled"
+                if creds == "present"
+                else "disabled"
+            ),
+            "reason": (
+                None
+                if creds == "present"
+                else (
+                    "Earthdata credentials absent — "
+                    "ASF search needs EARTHDATA_TOKEN "
+                    "or EARTHDATA_USERNAME + "
+                    "EARTHDATA_PASSWORD"
+                )
+            ),
         }
+
         return {
             "ok": True,
             "data_dir": str(data_dir),
             "data_dir_exists": data_dir.exists(),
+
             "db_dir": db_dir,
+
             "bundles_dir": str(bundles_dir),
             "bundles_dir_exists": bundles_dir.exists(),
+
             "scans_enabled": scans_enabled(),
-            "busy": busy,                         # {kind, run_id, step, started_at} | null
+
+            "busy": busy,
+
             "earthdata_credentials": creds,
-            "cache_write": {"status": "enabled" if cache_enabled else "disabled",
-                            "reason": cache_reason},
+
+            "cache_write": {
+                "status": (
+                    "enabled"
+                    if cache_enabled
+                    else "disabled"
+                ),
+                "reason": cache_reason,
+            },
+
             "granule_search": granule_search,
-            "note": "presence-only health; it never implies verdicts",
+
+            "note": (
+                "presence-only health; "
+                "it never implies verdicts"
+            ),
         }
 
     return app
