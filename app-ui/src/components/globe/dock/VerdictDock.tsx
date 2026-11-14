@@ -14,6 +14,7 @@ import type { VerdictUse } from "@/lib/verdictUse";
 import { planWhy, type WhyPair } from "@/lib/whyPlan";
 import { AUTOLOAD_DIFFS } from "@/lib/config";
 import { usePairDifferences } from "@/lib/usePairDifferences";
+import { useAreaDiffPictures, type AreaBox } from "@/lib/useAreaDiffPictures";
 import { otherPairs, type PairChoice } from "@/lib/otherPairs";
 import { PRODUCT_SHORT, shortDay } from "@/lib/diffModes";
 import { modeRank } from "@/lib/diffModes";
@@ -58,6 +59,9 @@ export interface VerdictDockProps {
   /** phones: the timeline lives in the sheet's Data tab, the dock shows the verdict and the player */
   narrow: boolean;
   onOverlay: (o: OverlaySpec | null) => void;
+  /** the other tiles of the scan box (the pinned one excluded, nearest the pin first): the chosen picture is drawn on them too */
+  areaBoxes?: AreaBox[];
+  onAreaOverlays?: (specs: OverlaySpec[]) => void;
   /** draw one result layer alone on the map (the previous one fades out); resolves to an error message, or null when drawn */
   showLayer: (pipeline: string, layer: string) => Promise<string | null>;
   loadLayer: (pipeline: string, layer: string) => Promise<LayerPayload>;
@@ -203,6 +207,20 @@ export default function VerdictDock(props: VerdictDockProps) {
       drew.current = true;
     } else if (drew.current) { overlayRef.current(null); drew.current = false; }
   }, [mode, overlayOn, chosen, thumb?.url]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // the same picture on every other tile of the scan box: same pair, layer and mode as the chosen chip, the pinned tile's colour range.
+  // It starts once this chip's own pair has finished loading, so the engine is not asked for two things at once.
+  const areaOn = mode === "verdict" && overlayOn && !!chip && thumb?.status === "ok" && (chip.g.d.finished || !!chip.g.d.invError);
+  const areaDiff = useAreaDiffPictures({
+    enabled: areaOn, firstId: chip?.g.d.first?.id ?? null, secondId: chip?.g.d.second?.id ?? null,
+    layerKey: chip?.t.layerKey ?? null, mode: chip?.t.mode ?? null,
+    range: thumb?.meta && Number.isFinite(thumb.meta.lo) && Number.isFinite(thumb.meta.hi) ? { lo: thumb.meta.lo, hi: thumb.meta.hi } : null,
+    boxes: props.areaBoxes ?? [],
+  });
+  const areaCb = useRef(props.onAreaOverlays);
+  areaCb.current = props.onAreaOverlays;
+  useEffect(() => { areaCb.current?.(areaDiff.specs); }, [areaDiff.specs]);
+  useEffect(() => () => { areaCb.current?.([]); }, []);
+
   const choose = (key: string | null) => {
     touched.current = true;
     if (key === null) { setOverlayOn(false); return; }
@@ -374,7 +392,7 @@ export default function VerdictDock(props: VerdictDockProps) {
           (wantDiffs || autoload) ? (groups.length > 0 || choices.length > 0) && (
             <OverlayStrip
               groups={groups} chosen={chosen} overlayOn={overlayOn} onChoose={choose}
-              choices={choices} extra={extra} onExtra={chooseExtra}
+              choices={choices} extra={extra} onExtra={chooseExtra} area={areaDiff}
             />
           ) : props.engineOnline && !!props.tileBbox ? (
             <div className="vd-ov"><div className="vd-ov-row">

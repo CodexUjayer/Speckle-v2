@@ -49,7 +49,6 @@ earthquake:                     # earthquake_coseismic (per-request override: tr
   merge_geometries: true        # ascending sees one side of the terrain, descending the other: also build merged layers (detected_merged, geometry_coverage, ...)
   merge_decompose: true         # event mode only: solve east + up motion where BOTH geometries saw the pixel (north-south assumed zero)
   merge_min_geometry_det: 0.3   # skip the east/up solve where the two look vectors are too alike (|determinant| below this)
-  mechanism_lookup_max: 10      # ComCat's event list has no moment tensor; look up the focal mechanism of up to this many in-window events (0 = off)
 
 registry:
   fetch_for_unmodelled: false   # false: products are fetched / steps run only for pipelines that really have a run()

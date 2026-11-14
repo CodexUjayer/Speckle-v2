@@ -120,9 +120,9 @@ function AreaScan(props: ScanPanelProps & { area: AreaScanProps }) {
               Stop after the current tile
             </button>
           )}
-          {a.layers && doneN > 0 && <AreaLayerPicker layers={a.layers} />}
         </div>
       )}
+      {a.layers && (doneN > 0 || a.layers.sourceCount > 0) && <AreaLayerPicker layers={a.layers} />}
     </div>
   );
 }

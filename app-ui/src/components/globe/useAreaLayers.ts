@@ -7,12 +7,16 @@
  *  had opened. Here each finished tile's layer is fetched from its own run or bundle, coloured by the same
  *  colorize() as everywhere else (the engine's own vmin / vmax / colormap / bounds), and handed to the map as one
  *  overlay per tile. Nothing is computed or estimated in the UI. A tile that has no such layer, or whose layer
- *  cannot be displayed, is counted and reported, never silently skipped. */
+ *  cannot be displayed, is counted and reported, never silently skipped.
+ *
+ *  Which tiles: every tile of the scan box that has a result. That is the tiles finished by the scan that is running
+ *  AND the tiles scanned earlier (the newest cached result of each), so the whole area shows up at once instead of one
+ *  tile at a time as a long scan crawls along; a tile's new result replaces its earlier one the moment it is done. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { cache, cacheConfigured } from "@/lib/cache";
 import { colorize, decodeLayer, validateLayerPayload } from "@/lib/raster";
-import type { LayerPayload, PipelineResult } from "@/lib/types";
+import type { LayerPayload, PipelineResult, TileInfo } from "@/lib/types";
 import type { OverlaySpec } from "./GlobeMap";
 import type { AreaTile } from "./ScanPanel";
 
@@ -25,6 +29,8 @@ export interface AreaLayers {
   select: (c: AreaLayerChoice | null) => void;
   /** one overlay per tile that has the layer */
   specs: OverlaySpec[];
+  /** tiles that have a result to draw (this scan's finished tiles plus earlier cached ones) */
+  sourceCount: number;
   /** done = tiles tried (drawn or not); pending = finished tiles still being fetched; total = the whole scan's tile count */
   progress: { done: number; drawn: number; unavailable: number; pending: number; total: number } | null;
   /** the first drawn tile's payload: what the colour legend shows */
@@ -35,6 +41,13 @@ export interface AreaLayers {
 }
 
 type Loaded = { spec: OverlaySpec; payload: LayerPayload } | null;   // null = this tile has no displayable layer
+
+/** Overlay spec ids MUST start with "overlay:" (GlobeMap only removes and fades sources it can map back to such an id) and
+ *  end with the result they draw (`@bundle`), so a re-scanned tile's new picture is a new source that replaces the old one. */
+export const areaSpecPrefix = (tileId: string) => `overlay:area:${tileId}:`;
+
+/** one tile result: the same tile with a NEW bundle/run (its scan just finished) is a different result */
+const keyOf = (t: AreaTile) => `${t.tile.id}|${t.bundleId ?? ""}|${t.runId ?? ""}`;
 
 async function loadOne(t: AreaTile, c: AreaLayerChoice): Promise<Loaded> {
   const live = !(cacheConfigured && t.bundleId);
@@ -53,7 +66,7 @@ async function loadOne(t: AreaTile, c: AreaLayerChoice): Promise<Loaded> {
   colorize(payload, decoded.data, canvas);
   return {
     payload,
-    spec: { id: `area:${t.tile.id}:${c.pipeline}:${c.layer}`, dataUrl: canvas.toDataURL(), bounds: payload.bounds_lonlat, opacity: 0.8 },
+    spec: { id: `${areaSpecPrefix(t.tile.id)}${c.pipeline}:${c.layer}@${(t.bundleId ?? t.runId ?? "").replace(/[^A-Za-z0-9_-]/g, "_")}`, dataUrl: canvas.toDataURL(), bounds: payload.bounds_lonlat, opacity: 0.8 },
   };
 }
 
@@ -72,16 +85,45 @@ function rasterChoices(results: PipelineResult[]): AreaLayerChoice[] {
 
 const POOL = 3;       // layers fetched at once: enough to be quick, few enough not to flood the engine or the cache
 
-export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
-  const ok = useMemo(() => (queue ?? []).filter((t) => t.status === "ok" && (t.bundleId || t.runId)), [queue]);
-  const okKey = ok.map((t) => `${t.tile.id}|${t.bundleId ?? ""}|${t.runId ?? ""}`).join(",");
-  const total = queue?.length ?? 0;
+export function useAreaLayers(queue: AreaTile[] | null, plan: TileInfo[] | null = null): AreaLayers {
+  // earlier scans of the area: the newest cached bundle of each tile of the box
+  const planIds = useMemo(() => (queue ?? plan?.map((t) => ({ tile: t })) ?? []).map((t) => t.tile.id), [queue, plan]);
+  const planKey = planIds.join(",");
+  const [earlier, setEarlier] = useState<Map<string, string>>(new Map());
+  const [earlierError, setEarlierError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cacheConfigured || planIds.length === 0) { setEarlier(new Map()); setEarlierError(null); return; }
+    let alive = true;
+    cache.forTiles(planIds)
+      .then((rows) => {
+        if (!alive) return;
+        const m = new Map<string, string>();
+        for (const r of rows) if (!m.has(r.tile)) m.set(r.tile, r.bundle_id);      // rows come newest first
+        setEarlier(m); setEarlierError(null);
+      })
+      .catch((e) => { if (alive) setEarlierError(e instanceof Error ? e.message : String(e)); });
+    return () => { alive = false; };
+  }, [planKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ok = useMemo(() => {
+    const base: AreaTile[] = queue ?? plan?.map((t) => ({ tile: t, status: "waiting" as const })) ?? [];
+    const out: AreaTile[] = [];
+    for (const t of base) {
+      if (t.status === "ok" && (t.bundleId || t.runId)) { out.push(t); continue; }       // finished by this scan
+      const b = earlier.get(t.tile.id);                                                  // else its earlier result, if any
+      if (b) out.push({ ...t, status: "ok", bundleId: b, runId: undefined });
+    }
+    return out;
+  }, [queue, plan, earlier]);
+  const okKey = ok.map(keyOf).join(",");
+  const total = queue?.length ?? plan?.length ?? 0;
 
   const [choices, setChoices] = useState<AreaLayerChoice[]>([]);
   const [selected, setSelected] = useState<AreaLayerChoice | null>(null);
   const [loaded, setLoaded] = useState<Map<string, Loaded>>(new Map());
   const [opacity, setOpacity] = useState(0.8);
-  const [error, setError] = useState<string | null>(null);
+  const [layerError, setError] = useState<string | null>(null);
+  const error = layerError ?? earlierError;
   const memo = useRef<{ sel: string; done: Map<string, Loaded> }>({ sel: "", done: new Map() });
   const choicesFrom = useRef<string>("");
   /** what the person last asked for: undefined = never chose (a layer is picked for them), null = pressed Hide, else a layer.
@@ -105,7 +147,7 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
   useEffect(() => {
     const t = ok[0];
     if (!t) return;
-    const from = `${t.tile.id}|${t.bundleId ?? ""}|${t.runId ?? ""}`;
+    const from = keyOf(t);
     if (choicesFrom.current === from) return;
     choicesFrom.current = from;
     let alive = true;
@@ -128,7 +170,7 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
     const selKey = `${selected.pipeline}:${selected.layer}`;
     if (memo.current.sel !== selKey) memo.current = { sel: selKey, done: new Map() };
     const done = memo.current.done;
-    const todo = ok.filter((t) => !done.has(t.tile.id));
+    const todo = ok.filter((t) => !done.has(keyOf(t)));
     if (todo.length === 0) { setLoaded(new Map(done)); return; }
     let cancelled = false;
     let next = 0;
@@ -137,7 +179,7 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
         const t = todo[next++];
         const r = await loadOne(t, selected);
         if (cancelled) return;
-        done.set(t.tile.id, r);
+        done.set(keyOf(t), r);
         setLoaded(new Map(done));
       }
     };
@@ -154,11 +196,11 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
     setSelected(same ?? choices[0]);
   }, [choices, selected]);
 
-  const entries = useMemo(() => ok.map((t) => loaded.get(t.tile.id)).filter((x): x is NonNullable<Loaded> => !!x), [ok, loaded]);
+  const entries = useMemo(() => ok.map((t) => loaded.get(keyOf(t))).filter((x): x is NonNullable<Loaded> => !!x), [ok, loaded]);
   const specs = useMemo(() => entries.map((e) => ({ ...e.spec, opacity })), [entries, opacity]);
-  const tried = ok.filter((t) => loaded.has(t.tile.id)).length;
+  const tried = ok.filter((t) => loaded.has(keyOf(t))).length;
   return {
-    choices, selected, select, specs,
+    choices, selected, select, specs, sourceCount: ok.length,
     progress: selected ? { done: tried, drawn: entries.length, unavailable: tried - entries.length, pending: ok.length - tried, total } : null,
     legend: entries[0]?.payload ?? null,
     opacity, setOpacity, error,

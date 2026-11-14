@@ -68,24 +68,30 @@ export function geometryViews(v: VerdictView | null): GeometryView[] {
 
 /** which layer names the lead result shows in a view: a family's base layer is swapped for the view's own layer(s);
  *  variants of other views are left out; anything else passes through in the engine's order */
-function leadLayerNames(v: VerdictView, view: GeometryView | null): string[] {
+interface LeadName { name: string; /** the view's own layer does not exist, so this is the engine's single-best-pair layer standing in for it */ fallback: boolean }
+function leadLayerNames(v: VerdictView, view: GeometryView | null): LeadName[] {
   const names = layerNames(v);
-  if (!view) return names;
+  if (!view) return names.map((name) => ({ name, fallback: false }));
   const have = new Set(names);
-  const variants = new Set<string>();
-  for (const f of Object.values(FAMILIES)) [...f.merged, f.ascending, f.descending].forEach((n) => variants.add(n));
-  const out: string[] = [];
+  const fams = Object.values(FAMILIES);
+  const out: LeadName[] = [];
+  const expanded = new Set<string>();
+  /** one family, once: the view's own layer(s); else the base layer as a labelled stand-in; else nothing (never a wrong geometry) */
+  const expand = (fam: (typeof fams)[number]) => {
+    if (expanded.has(fam.base)) return;
+    expanded.add(fam.base);
+    const want = view === "merged" ? fam.merged : [view === "ascending" ? fam.ascending : fam.descending];
+    const present = want.filter((w) => have.has(w));
+    if (present.length) out.push(...present.map((name) => ({ name, fallback: false })));
+    else if (have.has(fam.base)) out.push({ name: fam.base, fallback: true });     // no such layer (e.g. no east/up in scan mode)
+  };
   for (const n of names) {
-    const fam = Object.values(FAMILIES).find((f) => f.base === n);
-    if (fam) {
-      const want = view === "merged" ? fam.merged : [view === "ascending" ? fam.ascending : fam.descending];
-      const present = want.filter((w) => have.has(w));
-      out.push(...(present.length ? present : [n]));     // no such layer (e.g. no east/up in scan mode): the engine's own pair layer
-    } else if (variants.has(n)) {
-      continue;                                          // reached through its family above
-    } else if (MERGED_ONLY.has(n) && view !== "merged") {
-      continue;
-    } else out.push(n);
+    const byBase = fams.find((f) => f.base === n);
+    const byVariant = fams.find((f) => f.merged.includes(n) || f.ascending === n || f.descending === n);
+    if (byBase) expand(byBase);
+    else if (byVariant) expand(byVariant);               // a family whose base layer the engine did not send still shows its variants
+    else if (MERGED_ONLY.has(n) && view !== "merged") continue;
+    else out.push({ name: n, fallback: false });
   }
   return out;
 }
@@ -99,16 +105,16 @@ export function buildLayerSteps(v: VerdictView, view: GeometryView | null = null
   const steps: LayerStep[] = [];
   outer: for (const r of [v.result, ...v.others] as PipelineResult[]) {
     const mine = r === v.result;
-    const names = mine ? leadLayerNames(v, view)
-      : ((r.layers ?? []) as unknown as { name?: string; kind?: string }[]).filter((l) => l && l.kind === "raster" && l.name).map((l) => l.name as string);
-    for (const name of names) {
+    const names: LeadName[] = mine ? leadLayerNames(v, view)
+      : ((r.layers ?? []) as unknown as { name?: string; kind?: string }[]).filter((l) => l && l.kind === "raster" && l.name).map((l) => ({ name: l.name as string, fallback: false }));
+    for (const { name, fallback } of names) {
       if (steps.length >= MAX_LAYER_STEPS) break outer;
       // boxes belong to the lead result: the ones drawn on this layer, else the ones tied to no layer
       const forLayer = mine ? v.hotspots.filter((h) => h.layer === name) : [];
       const boxes = mine ? (forLayer.length ? forLayer : v.hotspots.filter((h) => !h.layer)) : [];
       steps.push({
         kind: "layer", key: `layer:${r.pipeline}:${name}`,
-        title: NAMES[name] ?? human(name), body: null,
+        title: `${NAMES[name] ?? human(name)}${fallback ? ", best pair only" : ""}`, body: null,
         pipeline: r.pipeline, layer: name, boxes,
       });
     }

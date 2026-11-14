@@ -32,7 +32,6 @@ class EqParams:
     event_buffer_days: float = 1.0                # R1 query window: ref-1d .. sec+1d
     forward_subgrid_max_points: int = 400_000
     forward_top_events: int = 3
-    mechanism_lookup_max: int = 10                # how many ranked events may get a ComCat detail lookup for their moment tensor (0 = off)
     credible_pixel_factor: int = 4
     # forward-model screen hardening (EQ_AUDIT P1/P2/P3/P4): robust peaks, a predicted-signal gate and a
     # spatially-aware null for the pattern correlation
@@ -107,8 +106,6 @@ class EqParams:
             overrides["correlation_alpha"] = min(0.5, max(0.001, float(overrides["correlation_alpha"])))
         if "merge_min_geometry_det" in overrides:
             overrides["merge_min_geometry_det"] = min(1.0, max(0.05, float(overrides["merge_min_geometry_det"])))
-        if "mechanism_lookup_max" in overrides:
-            overrides["mechanism_lookup_max"] = min(40, max(0, int(overrides["mechanism_lookup_max"])))
         if "scan_pairs_per_stack" in overrides:
             overrides["scan_pairs_per_stack"] = min(50, max(1, int(overrides["scan_pairs_per_stack"])))
         return dataclasses.replace(cls.defaults(), **overrides)
@@ -130,7 +127,6 @@ class EventRecord:
     depth_km: float | None
     url: str | None = None
     nodal_planes: tuple = ()     # ((strike, dip, rake), ...) — 0, 1 or 2 planes
-    has_mechanism: bool | None = None   # the event LIST says a moment-tensor / focal-mechanism product exists (None = unknown)
 
     @classmethod
     def from_mapping(cls, m: dict) -> "EventRecord":
@@ -145,7 +141,6 @@ class EventRecord:
             depth_km=(float(m["depth_km"]) if m.get("depth_km") is not None else None),
             url=(str(m["url"]) if m.get("url") else None),
             nodal_planes=tuple(tuple(float(c) for c in p) for p in planes),
-            has_mechanism=(bool(m["has_mechanism"]) if m.get("has_mechanism") is not None else None),
         )
 
 

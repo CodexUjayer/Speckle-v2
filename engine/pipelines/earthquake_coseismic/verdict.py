@@ -23,7 +23,7 @@ from . import merge as geom_merge
 from . import model
 from . import prep
 from . import uncatalogued
-from .fetch import enrich_mechanisms, fetch_events, fetch_shakemap_note
+from .fetch import fetch_events, fetch_shakemap_note
 from .lib_local import core_bounds_lonlat, encode_layer
 from .types import EqParams
 
@@ -180,23 +180,11 @@ def run(bundle, providers: dict | None = None) -> PipelineResult:
     # ---- 5. forward-model screens (top-N ranked events, ALL their planes) ---
     selection = model.rank_events(events, best.ref_time, best.sec_time,
                                   tuple(bundle.tile.center_lonlat), params)
-    # ComCat's event list has no moment tensor: look the mechanism up per event (largest first, capped), then screen the
-    # largest events THAT HAVE one. Without this every real run ends in events_unscreenable.
-    selection.ranked, mech_ids, mech_notes = enrich_mechanisms(selection.ranked, params, providers=providers)
-    warnings.extend(mech_notes)
-    if mech_ids:
-        by_id = {ev.id: ev for ev, _ in selection.ranked}
-        events = [by_id.get(e.id, e) for e in events]
-        selection.primary = selection.ranked[0][0] if selection.ranked else None
-        selection.alternatives = [ev for ev, _ in selection.ranked[1:]]
-    # screen pool: events with a mechanism first (stable, so magnitude order is kept inside each group)
-    screen_pool = ([x for x in selection.ranked if x[0].nodal_planes]
-                   + [x for x in selection.ranked if not x[0].nodal_planes])
     screens: list[dict] = []
     # determinism: the correlation null is seeded from the bundle content hash (same bundle -> same p). Kept out of
     # `params` so detail.params still reports exactly the parameters that were requested.
     screen_params = dataclasses.replace(params, surrogate_seed=_bundle_seed(bundle))
-    for ev, dist in screen_pool[: params.forward_top_events]:
+    for ev, dist in selection.ranked[: params.forward_top_events]:
         for plane in range(max(1, len(ev.nodal_planes)) if ev.nodal_planes else 1):
             screens.append(model.forward_screen(best, ev, bundle.tile.epsg, screen_params, plane_index=plane))
     for item in selection.excluded[:20]:
@@ -350,9 +338,6 @@ def run(bundle, providers: dict | None = None) -> PipelineResult:
         f"(stack {best.stack_key}, granules {', '.join(best.granule_ids)})",
         f"R1 ComCat events ({len(events)} in query window, source {events_res.source})",
     ]
-    if mech_ids:
-        data_used.append(f"R1 ComCat event records (moment tensor / focal mechanism) for {len(mech_ids)} event(s): "
-                         + ", ".join(mech_ids[:5]) + (" ..." if len(mech_ids) > 5 else ""))
     if best.los_enu is not None:
         data_used.append("geometry los_enu (radarGrid) — P05")
 
@@ -677,7 +662,7 @@ def run(bundle, providers: dict | None = None) -> PipelineResult:
         "events_considered": [
             {"id": ev.id, "magnitude": ev.magnitude, "distance_km": round(dist, 1),
              "time": ev.time, "place": ev.place}
-            for ev, dist in screen_pool[: params.forward_top_events]
+            for ev, dist in selection.ranked[: params.forward_top_events]
         ],
         "events_excluded": selection.excluded[:20],
         "forward_screens": [

@@ -32,7 +32,7 @@ import Legend, { MapKey } from "./Legend";
 import AreasPanel from "./AreasPanel";
 import ScanPanel from "./ScanPanel";
 import { ScanStatusStrip, scanStatusFrom, useScanTraffic } from "./ScanStatus";
-import { useAreaLayers } from "./useAreaLayers";
+import { areaSpecPrefix, useAreaLayers } from "./useAreaLayers";
 import FindingsPanel, { type LayerSource } from "./FindingsPanel";
 import { verdictUseFrom } from "@/lib/verdictUse";
 import DataPanel from "./DataPanel";
@@ -136,7 +136,7 @@ export default function GlobeApp() {
   const [queue, setQueue] = useState<AreaTile[] | null>(null);
   const queueRef = useRef<AreaTile[] | null>(null);
   const stopRef = useRef(false);
-  const areaLayers = useAreaLayers(queue);
+  const areaLayers = useAreaLayers(queue, areaPlan.tiles);
   const updateQueue = useCallback((fn: (q: AreaTile[]) => AreaTile[]) => {
     if (!queueRef.current) return;
     queueRef.current = fn(queueRef.current);
@@ -164,7 +164,11 @@ export default function GlobeApp() {
   const [overlayErrors, setOverlayErrors] = useState<Record<string, string>>({});
   const layerCache = useRef<Map<string, LayerCacheEntry>>(new Map());
   const lastOverlayOrder = useRef<string[]>([]);
+  /** newest exclusive (tour) layer request: a slower, older fetch that resolves after a newer step or a clear must not draw */
+  const overlayReq = useRef(0);
   const [sarSpec, setSarSpec] = useState<OverlaySpec | null>(null);
+  /** the dock's chosen picture on the scan box's other tiles */
+  const [dockAreaSpecs, setDockAreaSpecs] = useState<OverlaySpec[]>([]);
 
   // ---- map state -----------------------------------------------------------------------------
   const [flat, setFlat] = useState(false);
@@ -577,6 +581,8 @@ export default function GlobeApp() {
   const ensureOverlay = useCallback(
     async (pipeline: string, layer: string, opts?: { exclusive?: boolean }): Promise<string | null> => {
       const key = `${pipeline}:${layer}`;
+      const req = opts?.exclusive ? ++overlayReq.current : overlayReq.current;
+      const stale = () => !!opts?.exclusive && req !== overlayReq.current;
       // `exclusive` (the See why tour) makes this layer the ONLY overlay, so the previous picture fades out as this one fades in
       if (overlays[key] && (!opts?.exclusive || Object.keys(overlays).length === 1)) return null;
       try {
@@ -606,6 +612,7 @@ export default function GlobeApp() {
           }
           layerCache.current.set(entryKey, entry);
         }
+        if (stale()) return null;          // the tour moved on (or cleared the map) while this layer was loading
         setOverlayErrors((m) => {
           const { [key]: _drop, ...rest } = m;
           return rest;
@@ -623,6 +630,7 @@ export default function GlobeApp() {
         return null;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
+        if (stale()) return null;
         setOverlayErrors((m) => ({ ...m, [key]: message }));
         return message;
       }
@@ -656,6 +664,12 @@ export default function GlobeApp() {
   }, []);
 
   // ---- map specs -------------------------------------------------------------------------------
+  // the scan box's other tiles (the pinned one has its own picture), nearest the centre first: the dock draws its chosen picture on them
+  const dockAreaBoxes = useMemo(
+    () => (customBox ? (areaPlan.tiles ?? []) : []).filter((t) => t.id !== tile?.id).map((t) => ({ id: t.id, bbox: t.bbox_lonlat })),
+    [customBox, areaPlan.tiles, tile?.id],
+  );
+
   const overlaySpecs: OverlaySpec[] = useMemo(() => {
     const specs: OverlaySpec[] = [];
     for (const key of lastOverlayOrder.current) {
@@ -668,14 +682,18 @@ export default function GlobeApp() {
     }
     // one layer from every finished tile of an area scan; the tile that is open already draws the same layer
     // through `overlays`, so its area copy is left out (two copies of one picture would stack and look denser)
-    const openPrefix = selectedTile ? `area:${selectedTile}:` : null;
+    const openPrefix = selectedTile ? areaSpecPrefix(selectedTile) : null;
+    // a tile that has the dock's picture (brightness change ...) shows that one; the scan layer fills only the tiles without it
+    const dockTiles = new Set(dockAreaSpecs.map((d) => d.id.split(":")[2]));
     for (const a of areaLayers.specs) {
-      if (openPrefix && a.id.startsWith(openPrefix) && overlays[a.id.slice(openPrefix.length)]) continue;
+      if (openPrefix && a.id.startsWith(openPrefix) && overlays[a.id.slice(openPrefix.length).split("@")[0]]) continue;
+      if (dockTiles.has(a.id.split(":")[2])) continue;
       specs.push(a);
     }
+    specs.push(...dockAreaSpecs);
     if (sarSpec) specs.push(sarSpec);          // a SAR image of a selected granule sits on top
     return specs;
-  }, [overlays, resultsRunId, cachedResults, sarSpec, areaLayers.specs, selectedTile]);
+  }, [overlays, resultsRunId, cachedResults, sarSpec, areaLayers.specs, selectedTile, dockAreaSpecs]);
 
   const pins: { tile: string; lon: number; lat: number; tier: string; label: string }[] = useMemo(() => {
     const out: { tile: string; lon: number; lat: number; tier: string; label: string }[] = [];
@@ -839,6 +857,7 @@ export default function GlobeApp() {
   const immersive = dockMode !== "verdict";
   const showLayerOnly = useCallback((pipeline: string, layer: string) => ensureOverlay(pipeline, layer, { exclusive: true }), [ensureOverlay]);
   const clearTourLayers = useCallback(() => {
+    overlayReq.current++;               // cancels any layer still loading for an earlier step
     lastOverlayOrder.current = [];
     setOverlays({});
     setOverlayErrors({});
@@ -1300,6 +1319,8 @@ export default function GlobeApp() {
             reducedMotion={reducedMotion}
             narrow={isNarrow}
             onOverlay={setSarSpec}
+            areaBoxes={dockAreaBoxes}
+            onAreaOverlays={setDockAreaSpecs}
             showLayer={showLayerOnly}
             loadLayer={layerSource}
             clearLayers={clearTourLayers}
