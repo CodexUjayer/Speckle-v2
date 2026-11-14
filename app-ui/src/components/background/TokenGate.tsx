@@ -6,7 +6,7 @@
  *  authentication is an owner action. */
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
-import { getToken, setToken } from "@/lib/bgApi";
+import { getToken, setToken } from "@/lib/bgToken";
 
 export default function TokenGate({ onRetry, kind }: { onRetry: () => void; kind: "unauthorized" | "unconfigured" }) {
   const [value, setValue] = useState("");

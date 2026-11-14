@@ -3,9 +3,9 @@
 /** InlineTokenPrompt: the one-line way to hand the map the Background token when the engine still has its gate on.
  *  It replaces the old trip to the Background tab. The usual way never shows it: with NISAR_BACKGROUND_OPEN=1 on a
  *  local engine, or NEXT_PUBLIC_BACKGROUND_TOKEN in .env.local, the map does not ask at all. The token is kept in
- *  sessionStorage for this tab only (see lib/bgApi) and never placed in a URL. */
+ *  sessionStorage for this tab only (see lib/bgToken) and never placed in a URL. */
 import { useState } from "react";
-import { setToken } from "@/lib/bgApi";
+import { setToken } from "@/lib/bgToken";
 
 export default function InlineTokenPrompt({ kind, onSaved, tone = "light" }: {
   kind: "unauthorized" | "unconfigured";
