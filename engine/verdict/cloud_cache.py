@@ -106,7 +106,8 @@ class CloudCache:
 
     @classmethod
     def from_env(cls) -> "CloudCache":
-        key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        key = (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+               or os.environ.get("SUPABASE_SECRET_KEY"))
         return cls(os.environ.get("SUPABASE_URL"), key)
 
     @property
@@ -148,6 +149,72 @@ class CloudCache:
         except CacheWriteError as ex:
             report["failed"].append(str(ex))
         except Exception as ex:  # noqa: BLE001 — best-effort mirror: reported, never raised
+            report["failed"].append(f"{type(ex).__name__}: {ex}")
+        return report
+
+    # ------------------------------------------------------------------ read
+    # 4.6 read side: the tile/verdict routes serve the cache's rows (they survive engine
+    # restarts and hosts); verdicts.db stays the local fallback. Reads are best-effort in the
+    # routes — a Supabase problem never fails an endpoint, it just falls back to local rows.
+    def _get(self, query: str) -> tuple[bytes, dict]:
+        req = urllib.request.Request(f"{self.url}/rest/v1/verdicts?{query}", headers={
+            "apikey": self._key, "Authorization": f"Bearer {self._key}"})
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            return resp.read(), dict(resp.headers)
+
+    def count(self) -> int:
+        """Rows in the cache (Prefer: count=exact -> Content-Range). Raises on any problem."""
+        req = urllib.request.Request(f"{self.url}/rest/v1/verdicts?select=tile&limit=1", headers={
+            "apikey": self._key, "Authorization": f"Bearer {self._key}",
+            "Prefer": "count=exact"})
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            resp.read()
+            cr = resp.headers.get("Content-Range") or ""
+        # "0-0/29" with rows, "*/29" when empty — the total is always after the slash
+        try:
+            return int(cr.rsplit("/", 1)[-1])
+        except ValueError:
+            return 0
+
+    def latest_rows(self, limit: int = 1000) -> list:
+        """Newest `limit` rows (light columns), computed_at desc. Raises on any problem."""
+        body, _ = self._get(
+            "select=tile,pipeline,bundle_id,epoch,status,tier,raw_p,summary,run_id,"
+            "computed_at,first_computed_at&order=computed_at.desc"
+            f"&limit={int(max(1, min(limit, 10000)))}")
+        return json.loads(body.decode("utf-8"))
+
+    def tile_rows(self, tile: str) -> list:
+        """Every cached row of one tile (full bodies incl. `result`; layer grids stay in their
+        own column and are fetched on demand). Raises on any problem."""
+        q = urllib.parse.quote(tile, safe="")
+        body, _ = self._get(
+            "select=tile,pipeline,bundle_id,epoch,status,tier,raw_p,summary,run_id,"
+            "computed_at,first_computed_at,result,center_lon,center_lat,bbox_lonlat"
+            f"&tile=eq.{q}&order=computed_at.desc&limit=1000")
+        return json.loads(body.decode("utf-8"))
+
+    def seed(self, groups: list) -> dict:
+        """Upsert preset verdict groups (supabase/seed_verdicts.json shape) when the cache is
+        empty. Returns a small report; never raises."""
+        report = {"enabled": self.enabled, "seeded": 0, "skipped": None, "failed": []}
+        if not self.enabled:
+            report["skipped"] = self.disabled_reason
+            return report
+        try:
+            if self.count() > 0:
+                report["skipped"] = "cache already has rows"
+                return report
+            for g in groups:
+                rows = g.get("rows") or []
+                if not rows:
+                    continue
+                r = self.write_run(rows, run_id=g.get("run_id"), bundle_id=g.get("bundle_id")
+                                   or rows[0].get("bundle_id"), tile=g.get("tile") or rows[0].get("tile"),
+                                   params=None, computed_at=g.get("written_at"))
+                report["seeded"] += r.get("written", 0)
+                report["failed"].extend(r.get("failed", []))
+        except Exception as ex:  # noqa: BLE001 — seeding is best-effort, never blocks boot
             report["failed"].append(f"{type(ex).__name__}: {ex}")
         return report
 

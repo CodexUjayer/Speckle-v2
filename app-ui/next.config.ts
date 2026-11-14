@@ -24,6 +24,13 @@ const nextConfig: NextConfig = {
   /* The engine API base URL (FastAPI). Overridable via env. */
   env: {
     NEXT_PUBLIC_ENGINE_API: process.env.NEXT_PUBLIC_ENGINE_API ?? "http://127.0.0.1:8900",
+    /* Supabase verdict cache read side (the Cached/Map views, lib/cache.ts). The publishable
+       (anon) key is public by design — RLS allows reads only; only the engine's service key
+       can write. Override both with real env vars when hosting elsewhere. */
+    NEXT_PUBLIC_SUPABASE_URL:
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://onirsspdleznadqosekz.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_iLiy5s0CHF7CwNatk1kI0w_StMOcwGy",
   /* Speckle landing wiring: where the landing page's "Earthquakes" nav
      entry, the "Explore earthquakes" sector card and the finale CTA
      lead (LINKS.app in src/components/speckle/data.ts). Defaults to

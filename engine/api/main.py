@@ -149,3 +149,37 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+# 4.6 preset seeding: when the Supabase cache is configured, reachable and EMPTY, the
+# repo's preset verdicts (supabase/seed_verdicts.json) are upserted once at boot — so
+# every deployment starts with the presets already "run". Best-effort by design: a
+# daemon thread, never blocking startup, silent when unconfigured, logged when the
+# table does not exist yet (run supabase/migrations/*.sql in the Supabase SQL editor).
+@app.on_event("startup")
+async def _seed_verdict_cache() -> None:
+    import json as _json
+    import threading as _threading
+    from pathlib import Path as _Path
+
+    from engine.verdict.cloud_cache import CloudCache as _CloudCache
+
+    def _seed() -> None:
+        cache = _CloudCache.from_env()
+        if not cache.enabled:
+            return
+        seed_path = _Path(__file__).resolve().parents[2] / "supabase" / "seed_verdicts.json"
+        try:
+            groups = _json.loads(seed_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        report = cache.seed(groups)
+        _log = logging.getLogger("engine.api")
+        if report.get("seeded"):
+            _log.info("seeded %s preset verdicts into the Supabase cache", report["seeded"])
+        elif report.get("failed"):
+            _log.warning("preset seeding skipped/failed (table may not exist yet — run "
+                         "supabase/migrations in the SQL editor): %s",
+                         "; ".join(str(f)[:200] for f in report["failed"][:3]))
+
+    _threading.Thread(target=_seed, name="supabase-seed", daemon=True).start()
