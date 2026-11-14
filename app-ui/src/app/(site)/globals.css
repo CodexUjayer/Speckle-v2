@@ -504,3 +504,481 @@ html.speckle-root ::-webkit-scrollbar-thumb:hover {
 .corr-media img {
   transition: transform 1.4s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
+
+/* ------------------------------------------------------------------ */
+/* Earthquake page — shared surface language (speckle-scoped)           */
+
+/* view transition between the film and the earthquake investigation */
+@keyframes quake-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.quake-view-in {
+  animation: quake-view-in 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quake-view-in {
+    animation: none;
+  }
+}
+
+/* subtle rise used by quake cards/sections on reveal */
+@keyframes quake-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.quake-rise {
+  animation: quake-rise 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* ------------------------------------------------------------------ */
+/* Earthquake page — OBSERVATORY theme                                  */
+/* A clean, minimal, professional instrument: graphite panels, hairline */
+/* edges, one muted signal accent. Flat surfaces only — no glows, no    */
+/* halos, no neon. Scoped to .quake-paper so the film keeps its own     */
+/* dark system.                                                          */
+
+.quake-paper {
+  --qp-paper: #101013;
+  --qp-paper-2: #161619;
+  --qp-paper-3: #1d1d21;
+  --qp-edge: rgba(226, 222, 214, 0.1);
+  --qp-edge-2: rgba(226, 222, 214, 0.2);
+  --qp-ink: #f0efe9;
+  --qp-ink-2: #b4b2ab;
+  --qp-ink-3: #83817b;
+  --qp-red: #d95f33;
+  --qp-red-2: #ec8f6a;
+  --qp-red-wash: rgba(217, 95, 51, 0.07);
+  --qp-grid: rgba(226, 222, 214, 0.045);
+  --qp-grid-2: rgba(226, 222, 214, 0.08);
+  background-color: var(--qp-paper);
+  color: var(--qp-ink);
+}
+
+/* the chapter rule — a hairline that opens with a short accent dash */
+.qp-channel-rule {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--qp-red) 0,
+    var(--qp-red) 44px,
+    var(--qp-edge-2) 44px,
+    var(--qp-edge-2) 100%
+  );
+  opacity: 0.9;
+}
+
+/* the verdict seal — a clean double-hairline plate */
+.qp-stamp {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  padding: 0.5rem 1.05rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
+}
+.qp-stamp::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+/* the observatory panel — flat, quiet, precise */
+.qp-card {
+  background: var(--qp-paper-2);
+  border: 1px solid var(--qp-edge);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+
+/* (retired) recorder-paper corner clip — kept as a no-op for compatibility */
+.qp-card-clip::before {
+  content: none;
+}
+
+/* mono readout digits */
+.qp-readout {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the fixed chapter rail (desktop) — a minimal constellation line */
+.qp-rail {
+  position: fixed;
+  left: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+}
+.qp-rail-line {
+  position: absolute;
+  left: 5px;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: var(--qp-edge-2);
+}
+.qp-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+.qp-rail-dot {
+  position: relative;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--qp-ink-3);
+  background: var(--qp-paper);
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+.qp-rail-item[data-active="true"] .qp-rail-dot {
+  border-color: var(--qp-red);
+  background: var(--qp-red);
+}
+.qp-rail-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--qp-ink-3);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
+  white-space: nowrap;
+}
+.qp-rail-item:hover .qp-rail-label,
+.qp-rail-item[data-active="true"] .qp-rail-label {
+  opacity: 1;
+  transform: none;
+}
+.qp-rail-item[data-active="true"] .qp-rail-label {
+  color: var(--qp-red-2);
+}
+
+/* (retired) the hero's concentric epicentre rings — removed with the
+   glow/neon rework; kept as a no-op so old markup never shows anything */
+.qp-ring {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qp-ring {
+    display: none;
+  }
+}
+
+/* scroll reveal — a fluent rise */
+@keyframes qp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.qp-reveal {
+  opacity: 0;
+}
+.qp-reveal[data-shown="true"] {
+  animation: qp-rise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qp-reveal,
+  .qp-reveal[data-shown="true"] {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* the trace strip (real displacement profile) */
+.qp-trace-strip {
+  background: var(--qp-paper-2);
+  border: 1px solid var(--qp-edge);
+  border-radius: 14px;
+}
+
+/* dashed perforation between chapters (legacy) */
+.qp-perf {
+  height: 0;
+  border-top: 1px dashed var(--qp-edge-2);
+  opacity: 0.8;
+}
+
+/* link treatment */
+.quake-paper a {
+  color: var(--qp-red-2);
+}
+.quake-paper ::selection {
+  background: rgba(217, 95, 51, 0.28);
+}
+
+/* focus rings */
+.quake-paper :focus-visible {
+  outline: 2px solid var(--qp-red);
+  outline-offset: 3px;
+}
+
+/* thin dark scrollbar */
+.quake-paper ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.quake-paper ::-webkit-scrollbar-track {
+  background: var(--qp-paper);
+}
+.quake-paper ::-webkit-scrollbar-thumb {
+  background: var(--qp-edge-2);
+  border-radius: 5px;
+  border: 2px solid var(--qp-paper);
+}
+
+/* document chrome — while the quake view is mounted, the root follows the
+   observatory's graphite, so overscroll and the page scrollbar never
+   flash a different dark. :has() matches only while .quake-paper is in
+   the DOM (the film keeps its own rules above). */
+html.speckle-root:has(.quake-paper) body {
+  background: #101013;
+}
+html.speckle-root:has(.quake-paper) ::-webkit-scrollbar-track {
+  background: #101013;
+}
+html.speckle-root:has(.quake-paper) ::-webkit-scrollbar-thumb {
+  background: rgba(180, 178, 171, 0.16);
+  border: 2px solid #101013;
+}
+html.speckle-root:has(.quake-paper) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 178, 171, 0.28);
+}
+
+/* leaflet follows the observatory chrome, not the default white */
+.quake-paper .leaflet-popup-content-wrapper,
+.quake-paper .leaflet-popup-tip {
+  background: var(--qp-paper-2);
+  color: var(--qp-ink);
+  border: 1px solid var(--qp-edge);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.quake-paper .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+}
+.quake-paper .leaflet-popup-content p {
+  margin: 0.35em 0;
+}
+.quake-paper .leaflet-popup-close-button {
+  color: var(--qp-ink-3);
+}
+.quake-paper .leaflet-container a.leaflet-popup-close-button:hover {
+  color: var(--qp-red);
+}
+.quake-paper .leaflet-control-attribution {
+  background: rgba(16, 16, 19, 0.85);
+  color: var(--qp-ink-3);
+}
+.quake-paper .leaflet-control-attribution a {
+  color: var(--qp-ink-2);
+}
+.quake-paper .leaflet-bar a {
+  background: var(--qp-paper-2);
+  color: var(--qp-ink-2);
+  border-bottom: 1px solid var(--qp-edge);
+}
+.quake-paper .leaflet-bar a:hover {
+  background: var(--qp-paper-3);
+  color: var(--qp-red);
+}
+
+/* ------------------------------------------------------------------ */
+/* OBSERVATORY — the hero, the story steps, the ticker, the globe       */
+
+/* the scroll progress hairline — fluent feedback in the accent */
+.qx-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 60;
+  background: linear-gradient(to right, var(--qp-red), var(--qp-red-2));
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* the globe stage — canvas floating over the flat graphite, edges masked */
+.qx-globe-stage {
+  position: relative;
+  -webkit-mask-image: radial-gradient(closest-side, #000 74%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 74%, transparent 100%);
+}
+.qx-globe-stage canvas {
+  display: block;
+  touch-action: pan-y;
+}
+/* (retired) the orange globe halo — removed with the glow/neon rework;
+   kept as a no-op so old markup never paints anything */
+.qx-globe-halo {
+  display: none;
+}
+
+/* the live ticker — a quiet marquee of real events */
+.qx-ticker {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 5%,
+    #000 95%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 5%,
+    #000 95%,
+    transparent
+  );
+}
+.qx-ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 2.75rem;
+  width: max-content;
+  animation: qx-marquee 46s linear infinite;
+}
+.qx-ticker:hover .qx-ticker-track {
+  animation-play-state: paused;
+}
+@keyframes qx-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qx-ticker-track {
+    animation: none;
+    flex-wrap: wrap;
+    width: auto;
+  }
+}
+
+/* the story steps — ghost numbers, quiet lift */
+.qx-step {
+  position: relative;
+  border: 1px solid var(--qp-edge);
+  border-radius: 16px;
+  background: var(--qp-paper-2);
+  padding: 1.4rem 1.5rem 1.5rem;
+  transition:
+    border-color 0.45s ease,
+    transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.qx-step:hover {
+  transform: translateY(-2px);
+  border-color: var(--qp-edge-2);
+}
+.qx-step-num {
+  font-family: var(--font-speckle-display), serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: 2.7rem;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--qp-edge-2);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* the pulsing status dot (engine / live feed) — opacity only, no rings */
+@keyframes qx-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.45;
+  }
+}
+.qx-pulse-dot {
+  animation: qx-pulse 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qx-pulse-dot {
+    animation: none;
+  }
+}
+
+/* the verdict hero — THE sentence gets its own stage: flat, framed */
+.qp-verdict-hero {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--qp-red) 30%, transparent);
+  border-radius: 16px;
+  background: var(--qp-paper-2);
+}
+
+/* the seismic waveform divider — a quiet trace between acts */
+.qx-wave {
+  height: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='36' fill='none'%3E%3Cpath d='M0 18h64l8-9 8 18 8-27 8 27 8-18 8 9h112l8-6 8 12 8-21 8 21 8-12 8 6h112l8-9 8 18 8-27 8 27 8-18 8 9h112l8-6 8 12 8-21 8 21 8-12 8 6h64' stroke='%23d95f33' stroke-opacity='0.26' stroke-width='1.1'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: 0 center;
+  opacity: 0.8;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  animation: qx-wave-slide 9s linear infinite;
+}
+@keyframes qx-wave-slide {
+  from {
+    background-position: 0 center;
+  }
+  to {
+    background-position: -640px center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qx-wave {
+    animation: none;
+  }
+}

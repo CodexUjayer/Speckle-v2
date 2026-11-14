@@ -344,3 +344,41 @@ Nothing outside the `<!-- GALLERY:... -->` markers is touched.
 python -m pytest -q                                   # the maintained suite (tests + pipelines + lib)
 EQ_LIVE=1 python -m pytest -m live -q                 # opt-in live-network tests
 ```
+
+## 7. The Earthquake observatory — the landing's `#quake` view
+
+The cinematic landing now carries an in-page child view: the **Earthquake observatory**, a
+guided investigation room over the same engine API the console and map use. Nothing about the
+engine, the console, the map or the background pages changed — this is a purely additive
+front-end feature that talks to the same FastAPI surface (§5.2 tile-at, §5.5 granules, §5.3
+scans/runs, canonical verdicts).
+
+**Open it**: scroll the landing and use the **Explore earthquakes** entry points (nav CTA, the
+earthquake sector card, the finale), or go straight to `http://localhost:3000/#quake`. The URL
+hash is shareable and back-button safe; the film keeps your scroll position when you return.
+
+**The eight chapters** — Event (live USGS ComCat catalogue via the engine + the repo's curated
+disaster list), Coverage (the tile's NISAR GUNW/GCOV inventory), Scan (the real run workflow,
+progress straight from the engine's heartbeat), Trace (the LOS displacement profile from the
+engine's own raster), Verdict (the one-sentence answer with tier, probability and evidence),
+Map (MGRS tile + epicentre on Leaflet), Evidence (every claim, source and skipped input), and
+Archive (the engine's stored verdicts per tile — the same `verdicts.db` the console reads).
+
+**Where it lives**:
+
+| Path | What |
+|---|---|
+| `app-ui/src/components/quake/` | the observatory UI (sections, charts, globe, advanced panel) |
+| `app-ui/src/lib/engine/` | its typed engine client — transport only, zero science (the repo's `src/lib` rule) |
+| `app-ui/src/components/quake/engineHooks.ts` | the TanStack Query hooks over that client |
+| `app-ui/src/components/quake/data.ts` + `utils.ts` | the engine-parameter labels module + the `cn()` helper |
+| `app-ui/src/app/(landing)/page.tsx` | the film ↔ `#quake` view switcher |
+| `app-ui/src/app/providers.tsx` | the client-side query provider for the view |
+| `app-ui/src/app/api/engine-keepalive/route.ts` | dev-only convenience: GET it to verify/start the engine |
+
+New UI dependencies in `app-ui/`: `@tanstack/react-query`, `recharts`, `clsx`,
+`tailwind-merge` (run `npm install` once after pulling). The observatory honours the same
+engine conventions as the rest of the UI: it defaults to `http://127.0.0.1:8900` on localhost,
+and otherwise follows `NEXT_PUBLIC_ENGINE_API` — nothing new to configure if you already run the
+pair. With no Earthdata credentials configured the observatory shows the engine's own honest
+reasons verbatim (set `EARTHDATA_TOKEN` per §1.1 to unlock granule listings and scans).

@@ -48,7 +48,7 @@ const FORBIDDEN_PATTERNS = [
 // concepts in prose ("nodal plane" in the Chapter VIII earthquake narrative),
 // taken verbatim from the engine repo's manifests/docs, and computes nothing.
 // Same exemption category as the "UI labels that merely NAME" rule above.
-const ALLOWED_FILES = /no-science-guard|\.test\.|playwright|speckle[/\\]data\.ts$/;
+const ALLOWED_FILES = /no-science-guard|\.test\.|playwright|speckle[/\\]data\.ts$|quake[/\\]data\.ts$/;
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
