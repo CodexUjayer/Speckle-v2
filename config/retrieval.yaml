@@ -1,0 +1,55 @@
+# Retrieval layer settings. Every value can be overridden by an env var / .env entry
+# named NISAR_<SECTION>_<KEY> (e.g. NISAR_NET_CONCURRENCY=32). No absolute paths here:
+# the data root comes from NISAR_DATA_DIR (.env) or defaults to <repo>/data.
+
+net:
+  concurrency: 24            # simultaneous range GETs per process
+  granule_concurrency: 4     # granules fetched at the same time (the rest queue; they finish one by one)
+  connect_timeout_s: 20
+  stall_timeout_s: 25        # no bytes for this long => attempt counts as failed and is retried
+  retries: 5
+  coalesce_gap_bytes: 262144 # merge two chunk reads if the hole between them is smaller than this
+  max_request_bytes: 33554432
+  index_block_size_bytes: 524288   # read granularity while scanning HDF5 metadata (index build, h5py fallback)
+  index_page_buffer: false         # true = HDF5 page buffer (reads whole file pages, 4 MiB on NISAR) - costly on slow links
+  block_size_bytes: 4194304        # RangeFile default
+  url_ttl_s: 2400            # reuse a resolved (presigned) URL this long; re-resolved on 401/403
+  auth_hosts:                # Authorization header is only ever sent to these host suffixes
+    - earthdata.nasa.gov
+    - earthdatacloud.nasa.gov
+    - asf.alaska.edu
+
+decode:
+  threads: 4                 # inflate/unshuffle threads (zlib releases the GIL)
+
+cache:
+  ram_chunks_mb: 512         # decoded-chunk LRU in RAM
+  disk_chunks_gb: 20         # compressed-chunk cache on disk (LRU by mtime)
+  clips_gb: 50
+  ttl_s:                     # null = immutable (keyed by processing version, never expires)
+    granule_clip: null
+    search: 21600            # 6 h, same cadence as the granule poller
+    search_incomplete: 600   # a SHORT listing (ASF/CMR page error) is remembered this long, still flagged short, so reloads agree; 0 = never
+    layout_index: null
+  stale_on_error: true       # serve an expired clip + degraded flag if the network is down
+
+search:
+  max_results: 250
+  keep_all_versions: false
+  retry_incomplete: 1        # re-ask ASF this many times when CMR reports a short/incomplete page (never cached if still short)
+  timeout_s: 90              # give up waiting on one ASF search after this long (asf_search itself has no timeout)
+
+api:                         # Background reads (granule / preview / probe / stack-pair) have NO time limit
+  meta_wait_s: 20            # a request answers within this long, else 202 + job id; the UI then polls until the read is done
+  preview_wait_s: 2          # a layer preview answers within this long, else 202 + job id. Short on purpose: the page can only cancel
+                             # a read it has the job id of, and people click through layers faster than a NASA read finishes
+  job_idle_s: 120            # a read nobody has asked about for this long (page closed) is cancelled
+  poll_interval_s: 1         # how often the UI asks a waiting read for its answer (sent to the UI in every 202)
+  retry_backoff_s: [2, 5, 10, 30]   # waits between attempts after a network failure; the last repeats, attempts are not capped
+
+poll:
+  products: [GCOV, GUNW]     # processing levels the granule poller watches
+  lookback_days: null        # null = the same window.lookback_days as everything else (config/common.yaml); a number overrides for the poller only
+  max_results: 2000
+  interval_hours: 6
+  region: null               # [W, S, E, N] to restrict the poller to an area of interest; null = global

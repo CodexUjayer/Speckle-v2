@@ -1,0 +1,21 @@
+# Unified Python requirements: serving layer (engine/api) + retrieval + the common chain.
+# The runs store uses stdlib sqlite3. Python >= 3.11 (see pyproject.toml).
+
+# --- serving layer (was requirements-engine.txt)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# --- retrieval + common chain (was requirements-retrieval.txt)
+numpy>=1.26
+scipy>=1.11        # engine/common: terrain + resampling
+h5py>=3.8          # needs HDF5>=1.10.5 for get_chunk_info
+aiohttp>=3.9
+zarr>=3.0
+pyproj>=3.6
+shapely>=2.0       # MGRS tile cover + footprint geometry
+pyyaml
+python-dotenv
+asf_search>=7      # search only
+
+# optional: rasterio (GeoTIFF ancillary rasters; lazy import in engine/common/ancillary.py)
+# tests only: pytest, mgrs

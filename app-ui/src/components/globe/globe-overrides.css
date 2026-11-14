@@ -1,0 +1,16 @@
+/* Globe map-control placement. Layout: panel in a column on the LEFT, acquisition timeline in a dock along the
+   BOTTOM, zoom / compass / scale at the TOP-RIGHT; only the attribution stays bottom-right (it must stay visible).
+   - desktop (>=1024): the timeline dock sits just above the attribution (bottom: 36px, see GlobeApp);
+   - mobile (<1024): the bottom sheet's peek snap covers ~20vh - raise the attribution above it.
+   Imported by GlobeMap right after maplibre-gl.css; .globe-root keeps it off the (site) pages. */
+@media (max-width: 1023.98px) {
+  .globe-root .maplibregl-ctrl-bottom-right {
+    bottom: calc(20vh + 10px);
+  }
+}
+
+/* the verdict dock covers the bottom edge: keep the map attribution (a licence requirement) just above it */
+.globe-root .maplibregl-ctrl-bottom-right { bottom: calc(var(--dock-h, 0px) + 26px); transition: bottom 300ms cubic-bezier(0.32, 0.72, 0, 1); }
+@media (max-width: 1023.98px) {
+  .globe-root .maplibregl-ctrl-bottom-right { bottom: calc(20vh + var(--dock-h, 0px) + 30px); }
+}

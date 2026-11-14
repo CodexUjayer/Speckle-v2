@@ -1,0 +1,45 @@
+# How GET /api/background/preview turns a layer into a picture. Display encoding only — the
+# engine computes, the UI shows. Override the file with NISAR_PREVIEW_CONFIG, or the folder with
+# NISAR_CONFIG_DIR. Bump render_version whenever rendering changes: it invalidates cached previews.
+render_version: 3   # 3: previews cached under 2 were all drawn on a forced -90..90 range
+
+# scale=auto picks one of: db (10*log10, non-positive and non-finite values become no-data) | linear.
+# Keys are layer kinds from engine/common/layers.py (phase, coherence, cc, mask, power, float, angle, count).
+scale_by_kind:
+  power: db
+
+# cmap=auto picks a concrete colour map by layer kind; unknown kinds use default_cmap.
+cmap_by_kind:
+  power: gray
+  phase: diverging
+  coherence: viridis
+  cc: categorical
+  mask: categorical
+  count: viridis
+  angle: viridis
+  float: viridis
+default_cmap: viridis
+
+# unit shown for a rendered scale (null = unknown: the UI shows a dash)
+unit_by_scale:
+  db: dB
+
+# units of the pair-difference modes (GET /api/background/diff). db_diff is a difference of two dB
+# values (still dB); ratio is dimensionless (1 = no change); z_db is the dB change in units of the speckle
+# noise the preprocessing (P10) uses; coh_diff is a difference of coherences.
+# The diff cache keys carry the same render_version as previews: bumping it retires both.
+diff:
+  unit_by_mode:
+    db_diff: dB
+    ratio: "ratio (second / first)"
+    z_db: "σ (dB change ÷ speckle noise)"
+    coh_diff: "coherence (second − first)"
+
+# "validate with coherence" (the UI toggle, ?quality=coherence): a pixel's opacity follows the interferometric
+# coherence (0..1): min_alpha at coherence <= lo, fully opaque at coherence >= hi, linear in between.
+# Unknown coherence counts as the worst. Display encoding only - the data and the colour values are untouched.
+quality:
+  coherence:
+    lo: 0.2
+    hi: 0.6
+    min_alpha: 0.05

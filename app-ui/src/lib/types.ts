@@ -1,0 +1,747 @@
+/** API response types — mirrors the engine's FastAPI payloads only.
+ *  Zero science: these are transport shapes (docs/IMPLEMENTATION_PLAN.md 10). */
+
+export interface Health {
+  ok: boolean;
+  data_dir: string;
+  data_dir_exists: boolean;
+  bundles_dir: string;
+  bundles_dir_exists: boolean;
+  note: string;
+  /** what the retrieval worker is doing now; null when idle (never touches the worker pool) */
+  busy?: { kind: string; run_id: string | null; step: string | number | null; started_at: number | null } | null;
+  scans_enabled?: boolean;
+  earthdata_credentials?: "present" | "absent";
+  cache_write?: { status: "enabled" | "disabled"; reason: string | null };
+  granule_search?: { status: "enabled" | "disabled"; reason: string | null };
+}
+
+/** §5.2: the engine's answer for the MGRS tile that contains a point. */
+export interface TileInfo {
+  id: string;
+  epsg: number;
+  size_m: number;
+  bbox_lonlat: [number, number, number, number];
+  center_lonlat: [number, number];
+  polygon_lonlat: [number, number][];
+}
+
+/** §5.4: one detected change, with geometry the engine computed. */
+export interface Detection {
+  id: string;
+  label: string;
+  kind: string;
+  layer: string | null;
+  centroid_lonlat: [number, number];
+  bbox_lonlat: [number, number, number, number];
+  area_km2: number;
+  polarity: "toward" | "away" | "mixed" | null;
+  metrics: Record<string, { value: number; units: string }>;
+}
+
+export interface PipelineInfo {
+  name: string;
+  code: string;
+  sensor: string;
+  applies: string;
+  uses_codes: string[];
+  fetch_codes: string[];
+  min_epochs: number | null;
+  status_values: string[];
+  implemented: boolean;
+  execution?: string;
+  needs_sar?: boolean;
+}
+
+export interface BundleListItem {
+  bundle_id: string;
+  tile: string | null;
+  epsg: number | null;
+  center_lonlat: [number, number] | null;
+  bbox_lonlat: [number, number, number, number] | null;
+  epoch: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+export interface RunSummary {
+  id: string;
+  status: string;
+}
+
+export interface EvidenceItem {
+  id?: string;
+  kind: string;
+  /** one self-contained sentence — the engine's field is `claim` (never `text`) */
+  claim: string;
+  support?: Record<string, unknown> | null;
+  level?: string;
+  source_ref?: string | null;
+  [k: string]: unknown;
+}
+
+export interface PipelineResult {
+  pipeline: string;
+  tile: string;
+  epoch: string | null;
+  raw_p: number | null;
+  status: string;
+  summary?: string;
+  evidence: EvidenceItem[];
+  layers: string[];
+  data_used: string[];
+  references_used: string[];
+  runtime_s: number;
+  warnings: string[];
+  min_epochs_met: boolean | null;
+  bundle_id: string | null;
+  detail: Record<string, unknown>;
+}
+
+/** What the engine reports about mirroring a finished run into the Supabase cache. */
+export interface CacheReport {
+  enabled: boolean;
+  written: number;
+  skipped: { pipeline: string | null; reason: string }[];
+  failed: string[];
+  /** why the cache is off, when enabled is false */
+  reason?: string;
+}
+
+export interface RunState {
+  id: string;
+  status: "queued" | "running" | "ok" | "error";
+  progress: Record<string, unknown>;
+  error: string | null;
+  results: PipelineResult[];
+  /** absent on runs loaded from the store after an engine restart */
+  cache?: CacheReport;
+  /** §5.3: which kind of run this is ("scan" = started from a location) */
+  kind?: "scan" | "bundle";
+  tile?: string;
+  bundle_id?: string;
+}
+
+/** One cached verdict, light columns only (no result body, no layer grids). */
+export interface CachedSummary {
+  tile: string;
+  pipeline: string;
+  bundle_id: string;
+  epoch: string | null;
+  status: string;
+  tier: string | null;
+  raw_p: number | null;
+  summary: string | null;
+  run_id: string | null;
+  computed_at: string;
+  first_computed_at: string;
+  /** 0002 location columns (present when the engine wrote them) */
+  center_lon?: number | null;
+  center_lat?: number | null;
+  bbox_lonlat?: [number, number, number, number] | null;
+}
+
+/** The owner-curated featured area (DEC4). The tile is engine-resolved; entries start empty. */
+export interface FeaturedArea {
+  slug: string;
+  title: string;
+  blurb: string | null;
+  tile: string;
+  center_lon: number;
+  center_lat: number;
+  zoom: number | null;
+  sort_order: number;
+  created_at: string;
+}
+
+/** A cached verdict with its full result row (the PipelineResult the engine produced). */
+export interface CachedVerdict extends CachedSummary {
+  result: PipelineResult;
+}
+
+export interface LayerCategory {
+  value: number;
+  label: string;
+  tone: "positive" | "negative" | "neutral";
+}
+
+export interface LayerPayload {
+  name: string;
+  dtype: "<f4" | "<u1";
+  shape: number[];
+  data_b64: string;
+  units: string;
+  colormap: string;
+  vmin: number | null;
+  vmax: number | null;
+  note: string;
+  /** [W, S, E, N] core-grid corners, server-computed (plan 6.4, flat form) */
+  bounds_lonlat?: [number, number, number, number] | null;
+  /** categorical <u1 layers: the engine's own labels for the swatches */
+  categories?: LayerCategory[] | null;
+}
+
+export interface LayerResponse {
+  ok: true;
+  layer: LayerPayload;
+  pipeline: string;
+}
+
+export interface EventItem {
+  id: string;
+  magnitude: number | null;
+  place: string;
+  time: string;
+  lat: number;
+  lon: number;
+  depth_km: number | null;
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// §5.5 granule availability (the Data tab) — mirrors the engine's Resolved shape exactly;
+// field names are the engine's (PairGroup / EpochGroup), not the UI's.
+// ---------------------------------------------------------------------------------------------
+
+/** One GUNW pair group: ref/secondary acquisition times, the temporal baseline in days, and the
+ *  footprint of the group's FIRST granule (documented approximation the engine reports). */
+export interface GunwPairGroup {
+  ref_time: string | null;
+  sec_time: string | null;
+  dt_days: number | null;
+  flipped: boolean;
+  resolved: boolean;
+  granule_ids: string[];
+  frame: number | null;
+  footprint: [number, number][] | null;
+}
+
+/** One GCOV epoch: a near-instantaneous acquisition, not a span. */
+export interface GcovEpochGroup {
+  time: string | null;
+  granule_ids: string[];
+  frame: number | null;
+  footprint: [number, number][] | null;
+}
+
+/** One stack = one (direction, relative orbit), exactly the way P01 groups them. */
+export interface GranuleStack {
+  direction: string | null;
+  track: number | null;
+  gunw: GunwPairGroup[];
+  gcov: GcovEpochGroup[];
+  goff?: GunwPairGroup[];
+}
+
+export interface GranuleSearchResponse {
+  ok: true;
+  tile: TileInfo;
+  window: { t0: string; t1: string };
+  stacks: Record<string, GranuleStack>;
+  search_errors: Record<string, string>;
+  search_degraded: boolean;
+  /** ASF/CMR served a short page even after a retry; the listing may miss granules (not cached). */
+  search_incomplete?: boolean;
+  dropped_older: number;
+  flags: { code: string; severity: string; step: string; message: string }[];
+}
+
+// ---------------------------------------------------------------------------------------------
+// E8 — the Granule Explorer's bbox-based /api/granules types. These sit ALONGSIDE the legacy
+// per-tile GranuleSearchResponse above (the old Data tab keeps its own shape; do not merge).
+// Field names are the engine's (engine/api/granules_bbox.py).
+// ---------------------------------------------------------------------------------------------
+
+/** One granule: filename-decoded fields (only where verified — see engine/common/granule_id.py),
+ *  provider-side facts (ASF/CMR via GranuleRef.extra), and per-granule honesty flags. An absent
+ *  fact is null — never guessed. */
+export interface ExplorerGranule {
+  id: string;
+  product: string | null;
+  stack: string;
+  direction: "A" | "D" | null;
+  track: number | null;
+  frame: number | null;
+  start: string | null;
+  stop: string | null;
+  ref_time: string | null;
+  sec_time: string | null;
+  baseline_days: number | null;
+  cycle_ref: number | null;
+  cycle_sec: number | null;
+  polarization: string | null;
+  range_bandwidth_mhz: number | null;
+  collection: string | null;
+  crid: string | null;
+  version: string | null;
+  orbit_accuracy: { asf: string | null; filename: string | null };
+  size_bytes: number | null;
+  footprint: [number, number][] | null;
+  flags: string[];
+}
+
+/** One stack = one (direction, relative orbit), the engine's P01 grouping. Day gaps and epochs
+ *  are engine-computed (DEC13); nominal_repeat_days is null unless the engine supplies it. */
+export interface ExplorerStack {
+  key: string;
+  direction: "A" | "D" | null;
+  track: number | null;
+  n_granules: number;
+  n_epochs: number;
+  epochs: string[];
+  gaps_days: number[];
+  min_gap_days: number | null;
+  median_gap_days: number | null;
+  max_gap_days: number | null;
+  nominal_repeat_days: number | null;
+  first: string | null;
+  last: string | null;
+}
+
+export interface GranuleExplorerResponse {
+  ok: true;
+  bbox: [number, number, number, number];
+  window: { t0: string; t1: string };
+  n_total: number;
+  truncated: boolean;
+  degraded: boolean;
+  /** product levels (GUNW / GCOV) whose listing came back short */
+  search_incomplete_levels?: string[];
+  /** ASF/CMR reported an incomplete result — the list may miss granules and was NOT cached */
+  search_incomplete?: boolean;
+  search_warnings?: string[];
+  search_budget: number;
+  generated_at: string;
+  granules: ExplorerGranule[];
+  stacks: ExplorerStack[];
+  groups?: BackgroundGroup[];
+  epoch_merge_minutes?: number;
+}
+
+// ---------------------------------------------------------------------------------------------
+// UI-build-2 §4 — acquisition groups (engine-computed; the UI only draws). One group per distinct
+// acquisition; variants[] are the resolution variants (bandwidth/CRID/version/collection/pol).
+// ---------------------------------------------------------------------------------------------
+
+export interface BackgroundGroup {
+  key: string;
+  stack: string;
+  product: string | null;
+  kind: "pair" | "single" | "unknown";
+  ref_time: string | null;
+  sec_time: string | null;
+  start: string | null;
+  baseline_days: number | null;
+  n_variants: number;
+  grouped: boolean;
+  variant_facts: string[];
+  granule_ids: string[];
+  flags: string[];
+  variants: ExplorerGranule[];
+}
+
+/** GET /api/background/granule — decoded fields + layer inventory + the granule's group. */
+export interface GranuleDetailResponse {
+  ok: true;
+  id: string;
+  granule: ExplorerGranule;
+  decoded: Record<string, unknown>;
+  group: BackgroundGroup | null;
+  grouped: boolean;
+  inventory: {
+    grids: {
+      path: string; key: string; epsg: number | null;
+      nx: number; ny: number; dx: number | null; dy: number | null;
+      extras: { name: string; size: number }[];
+      layers: { path: string; key: string; shape: number[]; dtype: string;
+                chunks: number[] | null; readable: boolean; why_not: string | null;
+                requested_by_scan?: boolean;
+                /** engine-decided (layers.py roles + preview.yaml); null = unknown -> show a dash */
+                role?: string | null; kind?: string | null; previewable?: boolean;
+                default_cmap?: string | null; what_it_is?: string | null;
+                /** engine-decided: which pair-difference modes exist for this layer (valid + reason
+                 *  when not); the UI mirrors it, it never decides. null = the engine could not say. */
+                diff_modes?: Record<string, { valid: boolean; reason: string | null }> | null }[];
+    }[];
+    source: string;
+    n_layers: number;
+    scan_request_regex?: string | null;
+    n_layers_requested_by_scan?: number;
+  } | null;
+  inventory_note: string | null;
+  footprint: [number, number][] | null;
+}
+
+export interface PreviewMeta {
+  id: string;
+  layer: string;
+  cmap: string;
+  /** what was asked for ("auto" is resolved by the engine; `cmap` is what was used) */
+  cmap_requested?: string;
+  scale?: string;
+  scale_requested?: string;
+  /** null = unknown: show a dash, never "null" */
+  unit?: string | null;
+  render_version?: number;
+  nan_fraction?: number;
+  /** true when the colour range was given explicitly (lo/hi) instead of stretched from this image */
+  range_fixed?: boolean;
+  /** image corners [TL, TR, BR, BL] as [lon, lat], from the engine; null + corners_note = not drawable */
+  corners_lonlat?: [[number, number], [number, number], [number, number], [number, number]] | null;
+  corners_note?: string | null;
+  lo: number;
+  hi: number;
+  shown_stride: number;
+  shown_shape: [number, number];
+  epsg: number | null;
+  clip_bbox_lonlat: [number, number, number, number] | null;
+  requested_bbox: [number, number, number, number];
+  slice_note?: string | null;
+  /** engine-measured warnings about why the image may look empty (range misses the data, one dominant value) */
+  notes?: string[];
+  /** what the engine counted as no-data for this layer */
+  nodata_rule?: string;
+  /** what the coherence validation did; applied=false carries the reason it could not */
+  quality?: { mode: "off" | "coherence"; applied: boolean; layer?: string | null; reason?: string | null;
+              lo?: number; hi?: number; min_alpha?: number; same_grid?: boolean; range_from?: string;
+              hidden_fraction?: number; faded_fraction?: number; unvalidated_fraction?: number };
+  stats: { shape: number[]; dtype: string; min: number | null; max: number | null;
+           mean: number | null; p2: number | null; p50: number | null; p98: number | null;
+           modal_value?: number | null; modal_fraction?: number | null;
+           nan_fraction: number; n_bytes: number };
+  wire_bytes?: Record<string, number>;
+  clip_source?: string;
+  max_px_cap?: number;
+  cache_hit: boolean;
+  generated_at?: string;
+  /** GET /api/background/diff only: the pair facts (dates, gap, validation, per-mode validity) */
+  diff?: DiffPairInfo;
+
+  /** Phase 3: present whenever the values are line-of-sight displacement converted from
+   *  unwrapped phase (scale=los_m|los_mm, or a ?corr= diagnostic): the referencing facts. */
+  los?: {
+    wavelength_m: number;
+    phase_sign: number;
+    pair_flipped: boolean;
+    sign_applied: number;
+    ref_time: string | null;
+    sec_time: string | null;
+    unit: string;
+    formula: string;
+    assumptions: string[];
+    cc_gate?: string;
+    correction?: { name: string; role: string; label: string; applied_by_product: boolean;
+                   applied_by_engine: boolean; note: string };
+  } | null;
+  correction?: { name: string; role: string; label: string; applied_by_product: boolean;
+                 applied_by_engine: boolean; note: string } | null;}
+
+/** The `diff` block the engine attaches to a difference preview's metadata. */
+export interface DiffPairInfo {
+  mode: string;
+  mode_label: string;
+  id_a: string;
+  id_b: string;
+  date_a: string | null;
+  date_b: string | null;
+  window_a: string[] | null;
+  window_b: string[] | null;
+  gap_days: number;
+  later: "a" | "b" | null;
+  gap_rule: string;
+  validation: { product?: string | null; track?: number | null; frame?: number | null;
+                direction?: string | null };
+  same_grid: boolean;
+  resampled: string | null;
+  modes: Record<string, { valid: boolean; reason: string | null }>;
+  /** Phase 3, los modes only: how the two converted displacements are referenced */
+  referencing?: { shared_reference_date: boolean; reference_date_a: string | null;
+                  reference_date_b: string | null;
+                  window_a: (string | null)[]; window_b: (string | null)[];
+                  note: string; formula: string; assumptions: string[];
+                  cc_gate_a?: string; cc_gate_b?: string };
+}
+
+export interface StackPairResponse {
+  ok: true;
+  id: string;
+  product: string;
+  bbox_used: [number, number, number, number];
+  epoch_merge_minutes: number;
+  ref: { epoch: string; granules: ExplorerGranule[] };
+  sec: { epoch: string; granules: ExplorerGranule[] };
+  note: string;
+}
+
+/** GET /api/background/inspect — stats (+ histogram, + profile) of ONE granule/layer/box.
+ *  Every number is engine-computed on the values the legend describes (scale applied engine-side). */
+export interface InspectResponse {
+  ok: true;
+  id: string;
+  layer: string;
+  scale: string;
+  scale_requested?: string;
+  unit: string | null;
+  epsg: number | null;
+  clip_bbox_lonlat: [number, number, number, number] | null;
+  requested_bbox: [number, number, number, number];
+  stats: { shape: number[]; dtype: string; min: number | null; max: number | null;
+           mean: number | null; p2: number | null; p50: number | null; p98: number | null;
+           modal_value?: number | null; modal_fraction?: number | null;
+           nan_fraction: number; n_bytes: number; scale?: string; unit?: string | null };
+  histogram: { bins: number; edges: number[]; counts: number[]; n: number };
+  profile: {
+    a_lonlat: [number, number];
+    b_lonlat: [number, number];
+    epsg: number;
+    length_m: number;
+    n_samples: number;
+    n_valid: number;
+    samples: { i: number; lon: number; lat: number; x: number; y: number; value: number | null }[];
+  } | null;
+  date: string | null;
+  notes: string[];
+  cache_hit: boolean;
+  generated_at?: string;
+}
+
+/** GET /api/background/roi — statistics inside a drawn shape (Phase 4). The mask, the
+ *  projection and every number are engine-side; the UI draws the ring and the answer. */
+export interface RoiResponse {
+  ok: true;
+  id: string;
+  layer: string;
+  scale: string;
+  scale_requested?: string;
+  unit: string | null;
+  los: { cc_gate?: string; correction?: { label: string; applied_by_product: boolean; note: string };
+         [k: string]: unknown } | null;
+  epsg: number | null;
+  roi: {
+    kind: "box" | "polygon";
+    ring: [number, number][];
+    n_vertices: number;
+    area_km2: number;
+    n_pixels: number;
+    n_valid: number;
+    pixel_pitch_m: [number, number];
+    mask_rule: string;
+    stats: { shape: number[]; dtype: string; min: number | null; max: number | null;
+             mean: number | null; p2: number | null; p50: number | null; p98: number | null;
+             nan_fraction: number; n_bytes: number; scale?: string; unit?: string | null;
+             n_pixels?: number; n_valid?: number };
+    histogram: { bins: number; edges: number[]; counts: number[]; n: number };
+  };
+  requested_bbox: [number, number, number, number];
+  date: string | null;
+  notes: string[];
+  cache_hit: boolean;
+  generated_at?: string;
+}
+
+/** GET /api/background/pair-network — the interferometric network over the box (Phase 5).
+ *  Nodes are stack epochs, edges are pair products; graph facts (components, gaps) are
+ *  engine-side. The UI only draws and forwards a chosen pair. */
+export interface PairNetworkResponse {
+  ok: true;
+  n_nodes: number;
+  n_edges: number;
+  nodes: { stack: string; date: string; direction: "A" | "D" | null; track: number | null }[];
+  edges: { stack: string; from: string; to: string; from_node: number; to_node: number;
+           baseline_days: number | null; flipped: boolean; group_key: string;
+           granule_ids: string[]; n_variants: number }[];
+  possible_edges: { stack: string; from: string; to: string; baseline_days: number | null; note: string }[];
+  unplaced: { group: string | null; reason: string }[];
+  n_components: number;
+  network_note: string;
+  truncated_nodes: boolean;
+  search?: { bbox: [number, number, number, number]; window: { t0: string; t1: string };
+             n_total: number; truncated: boolean; degraded: boolean;
+             search_incomplete?: boolean; search_incomplete_levels?: string[] };
+  notes?: string[];
+}
+
+/** GET /api/background/lab-runs — the pipeline bridge (Phase 5): runs whose tile overlaps the
+ *  box + the trace arrays each can place on the map (corners from the arrays route's meta). */
+export interface LabRunsResponse {
+  ok: true;
+  bbox: [number, number, number, number];
+  runs: {
+    id: string; status: string | null; kind: string; tile: string; bundle_id: string;
+    created_at: string | null; pipelines: string[];
+    tile_bbox_lonlat: [number, number, number, number] | null;
+    has_live_trace: boolean; n_arrays: number;
+    arrays: Record<string, {
+      aid: string; path: string | null; label: string | null; step: string | null;
+      /** the path's first part (clips | decoded | ifg | …), the engine's name for its stage, and the step that first wrote it */
+      group?: string | null; stage?: string | null; first_step?: string | null;
+      shape: number[] | null; dtype: string | null; kind: string | null;
+      /** the picture is every `stride`-th pixel of the array (a preview thumbnail); `shape` and `stats` are the full array's */
+      stride?: number | null; thumb_shape?: number[] | null;
+      stats: { min: number | null; max: number | null; mean: number | null } | null;
+      corners_lonlat: [number, number][] | null; corners_note: string | null; note: string | null;
+    }[]>;
+  }[];
+  n_runs: number;
+  notes: string[];
+  generated_at?: string;
+}
+
+/** GET /api/background/timeseries — one engine-computed value per date over the box. */
+export interface TimeseriesResponse {
+  ok: true;
+  layer: string;
+  scale: string;
+  scale_requested?: string;
+  unit: string | null;
+  stat: string;
+  epsg: number | null;
+  requested_bbox: [number, number, number, number];
+  stack: { product: string | null; track: number | null; frame: number | null; direction: string | null };
+  points: { id: string; date: string | null; value: number | null; n_valid: number; nan_fraction: number }[];
+  missing: { id: string; reason: string }[];
+  dates_span: { first: string | null; last: string | null };
+  notes: string[];
+  cache_hit: boolean;
+  generated_at?: string;
+}
+
+/** §5 — the preprocessing payload (traced run or cached-bundle records). */
+export interface PreprocessingResponse {
+  ok: true;
+  run: { id: string | null; status: string | null; tile: string | null;
+         kind: string | null; bundle_id: string | null };
+  trace: PreprocessingTrace | null;
+  trace_arrays?: boolean;
+  empty_reason?: string;
+  note?: string;
+}
+
+export interface TraceArrayMeta {
+  aid: string;
+  path: string;
+  label: string;
+  group: string;
+  step: string;
+  first_step: string;
+  shape: number[];
+  dtype: string;
+  kind: string;
+  stats: Record<string, unknown>;
+  stride: number;
+  epsg: number | null;
+  extent: number[] | null;
+  note?: string | null;
+  fill?: number | null;
+  categories?: Record<string, number> | null;
+  thumb_shape?: number[];
+}
+
+export interface PreprocessingTrace {
+  steps: {
+    code: string; name: string; status: string; seconds: number; message: string;
+    new_flags: { code: string; severity: string; message: string }[];
+    new_assumptions: string[];
+    n_arrays_total: number;
+    reads?: string[];
+    /** the arrays this step WROTE (the exact versions it produced) */
+    arrays: TraceArrayMeta[];
+    /** the arrays this step RECEIVED (the exact versions as they stood before it ran); absent on cached bundles */
+    inputs?: TraceArrayMeta[];
+  }[];
+  arrays: Record<string, TraceArrayMeta>;
+  n_arrays?: number;
+  bundle_summary?: Record<string, unknown>;
+  handoff?: HandoffFeed;
+  flags?: { severity: string; step: string; code: string; message: string }[];
+  assumptions?: string[];
+  source?: string;
+}
+
+export interface HandoffRow {
+  name: string;
+  code: string;
+  sensor: string;
+  min_epochs: number | null;
+  routing: { route: string; reason?: string; reasons?: string[] } | Record<string, unknown> | null;
+  registry_status: string;
+  reasons: string[];
+  feed: string;
+  uses: { code: string; name: string; state: string; why: string }[];
+  own_fetch: { code: string; name: string; state: string; why: string }[];
+  missing_uses: string[];
+  own_missing: string[];
+  implemented: boolean;
+  verdict_state: string;
+}
+
+export interface HandoffFeed {
+  rows: HandoffRow[];
+  tally: Record<string, number>;
+  n_implemented: number;
+}
+
+/** §6 — one pipeline's input/process/output for one run. */
+export interface PipelineDetailResponse {
+  ok: true;
+  run: { id: string; status: string | null; tile: string | null; kind: string | null;
+         bundle_id: string | null };
+  manifest: {
+    name: string; code: string; sensor: string; applies: string;
+    uses_codes: string[]; fetch_codes: string[]; min_epochs: number | null;
+    status_values: string[]; execution: string;
+    method: string[]; own_prep: string[]; own_fetch: string[]; assumptions: string[];
+  };
+  routing: Record<string, unknown> | null;
+  feed: HandoffRow | null;
+  bundle_summary: Record<string, unknown> | null;
+  bundle_error: string | null;
+  result: PipelineResult;
+  result_missing: null;
+  process: {
+    runtime_s: number | null;
+    diagnostics: Record<string, unknown> | null;
+    detail_steps: unknown;
+    warnings: string[];
+    versions: Record<string, unknown>;
+  };
+}
+
+
+/** GET /api/background/explain — the engine's plain-language copy. null = unknown: render a dash. */
+export interface ExplainPayload {
+  ok: true;
+  nodes: Record<string, { title: string; plain: string; tech: string; page: string }>;
+  steps: { code: string; name: string; needs: string[]; plain: string | null; technical?: string | null }[];
+  layers: Record<string, { what_it_is: string | null; how_to_read: string | null; unit: string | null }>;
+  /** the Data Lab's difference modes: static teaching text from config/explain.yaml */
+  diff_modes?: Record<string, { what_it_is: string | null; how_to_read: string | null; misread: string | null }>;
+  pipelines: Record<string, { code: string; plain: string | null; applies: string | null; modelled: boolean }>;
+  counts: { declared: number; modelled: number; modelled_names: string[] };
+}
+
+/** GET /api/background/overview */
+export interface OverviewPayload {
+  ok: true;
+  nodes: {
+    key: string; title: string | null; plain: string | null; tech: string | null; page: string | null;
+    chips: { label: string; value: string | number | null }[];
+    run: { retrieval_id: string | null; run_id: string | null };
+  }[];
+  steps: { code: string; name: string; needs: string[]; plain: string | null; technical?: string | null }[];
+  counts: { declared: number; modelled: number; modelled_names: string[] };
+  featured_note: string;
+}
+
+/** GET /api/background/health — a plain JSON tree; the page renders what is there. */
+export interface HealthPayload {
+  ok: true;
+  health: Record<string, unknown>;
+  note: string;
+}
+
+export interface NetworkCheckPayload {
+  ok: true;
+  hosts: { host: string; what: string; ok: boolean; error?: string; http?: string;
+           dns_ms?: number; tcp_ms?: number; tls_ms?: number }[];
+}
