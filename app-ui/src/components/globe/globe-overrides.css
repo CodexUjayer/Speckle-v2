@@ -20,43 +20,4 @@
   .globe-root.details-open .maplibregl-ctrl-bottom-right { right: 316px; }
 }
 
-/* ---- scan status strip: the always-visible "is it working?" answer (ScanStatus.tsx) ----------------------------- */
-.globe-root .ss-box { border-radius: 14px; padding: 10px 12px 11px; font-size: 12px; line-height: 1.35; }
-.globe-root .ss-light { border: 1px solid #e7e2da; background: #fff; color: #4a443c; }
-.globe-root .ss-dark { background: var(--vd-fill, rgba(244, 239, 230, 0.08)); color: var(--vd-ink, #f4efe6); margin-bottom: 10px; }
-.globe-root .ss-head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; }
-.globe-root .ss-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.globe-root .ss-stop { display: block; margin-top: 6px; font-size: 11px; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; opacity: 0.85; }
-.globe-root .ss-stop:hover { opacity: 1; }
-.globe-root .ss-facts, .globe-root .ss-wire, .globe-root .ss-note { margin: 3px 0 0; opacity: 0.85; }
-.globe-root .ss-wire { font-variant-numeric: tabular-nums; }
-.globe-root .ss-note { font-size: 11px; opacity: 0.7; }
-.globe-root .ss-warn { opacity: 1; font-weight: 600; color: #9e3b2c; }
-.globe-root .ss-dark .ss-warn { color: #f08d6c; }
-.globe-root .ss-track { position: relative; height: 6px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: rgba(120, 105, 80, 0.22); }
-.globe-root .ss-dark .ss-track { background: rgba(244, 239, 230, 0.16); }
-.globe-root .ss-fill { display: block; height: 100%; border-radius: 3px; background: #b08d57; transition: width 600ms cubic-bezier(0.32, 0.72, 0, 1); }
-.globe-root .ss-dark .ss-fill { background: #ffd25e; }
-.globe-root .ss-indet { position: absolute; top: 0; bottom: 0; width: 38%; border-radius: 3px; background: #b08d57; animation: ss-slide 1.4s ease-in-out infinite; }
-.globe-root .ss-dark .ss-indet { background: #ffd25e; }
-@keyframes ss-slide { 0% { left: -40%; } 100% { left: 102%; } }
-@media (prefers-reduced-motion: reduce) {
-    .globe-root .ss-indet { animation: none; left: 0; width: 100%; opacity: 0.45; }
-}
-
-/* data counter row of the scan strip */
-.globe-root .ss-data { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
-.globe-root .ss-mb { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.globe-root .ss-mbl { font-size: 11.5px; opacity: 0.7; }
-.globe-root .ss-grow { flex: 1; }
-.globe-root .ss-spark { flex: none; opacity: 0.8; }
-
-/* ---- small "loading" motion everywhere else ---------------------------------------------------------------------- */
-/* a thin line along the top of the map while anything is loading (a scan, the tile lookup, the radar-pass search) */
-.globe-root .gb-line { position: absolute; top: 0; left: 0; right: 0; height: 3px; overflow: hidden; z-index: 40; pointer-events: none; background: rgba(255, 210, 94, 0.18); }
-.globe-root .gb-line span { position: absolute; top: 0; bottom: 0; width: 30%; border-radius: 2px; background: #ffd25e; animation: ss-slide 1.3s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-    .globe-root .gb-line span { animation: none; left: 0; width: 100%; opacity: 0.5; }
-}
-
-.globe-root .ss-dots { flex: none; margin-left: 2px; }
+/* the scan-status strip and the busy line moved to scan-status.css (imported by ScanStatus.tsx) */

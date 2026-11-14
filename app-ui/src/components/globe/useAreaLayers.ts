@@ -8,7 +8,7 @@
  *  colorize() as everywhere else (the engine's own vmin / vmax / colormap / bounds), and handed to the map as one
  *  overlay per tile. Nothing is computed or estimated in the UI. A tile that has no such layer, or whose layer
  *  cannot be displayed, is counted and reported, never silently skipped. */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { cache, cacheConfigured } from "@/lib/cache";
 import { colorize, decodeLayer, validateLayerPayload } from "@/lib/raster";
@@ -84,6 +84,10 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
   const [error, setError] = useState<string | null>(null);
   const memo = useRef<{ sel: string; done: Map<string, Loaded> }>({ sel: "", done: new Map() });
   const choicesFrom = useRef<string>("");
+  /** what the person last asked for: undefined = never chose (a layer is picked for them), null = pressed Hide, else a layer.
+   *  Kept across scans, so a new scan draws the same layer again and a Hide stays hidden. */
+  const userChoice = useRef<AreaLayerChoice | null | undefined>(undefined);
+  const select = useCallback((c: AreaLayerChoice | null) => { userChoice.current = c; setSelected(c); }, []);
 
   // a new scan (or none): forget the old one
   useEffect(() => {
@@ -141,11 +145,20 @@ export function useAreaLayers(queue: AreaTile[] | null): AreaLayers {
     return () => { cancelled = true; };
   }, [selected, okKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // draw by default: as soon as the scan says which layers exist, every finished tile gets one (no hidden dropdown to find first).
+  // Presentation only: the first layer the engine lists is the default, the picker still switches or hides it.
+  useEffect(() => {
+    if (selected || choices.length === 0 || userChoice.current === null) return;
+    const want = userChoice.current;
+    const same = want ? choices.find((c) => c.pipeline === want.pipeline && c.layer === want.layer) : undefined;
+    setSelected(same ?? choices[0]);
+  }, [choices, selected]);
+
   const entries = useMemo(() => ok.map((t) => loaded.get(t.tile.id)).filter((x): x is NonNullable<Loaded> => !!x), [ok, loaded]);
   const specs = useMemo(() => entries.map((e) => ({ ...e.spec, opacity })), [entries, opacity]);
   const tried = ok.filter((t) => loaded.has(t.tile.id)).length;
   return {
-    choices, selected, select: setSelected, specs,
+    choices, selected, select, specs,
     progress: selected ? { done: tried, drawn: entries.length, unavailable: tried - entries.length, pending: ok.length - tried, total } : null,
     legend: entries[0]?.payload ?? null,
     opacity, setOpacity, error,

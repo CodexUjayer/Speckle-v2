@@ -28,6 +28,7 @@ import {
 import { EARTH_ROTY, EARTH_DIST } from "../earth/choreo";
 import { HERO, CHAPTER_2, CHAPTER_3 } from "../data";
 import { Overlay } from "./shared";
+import ScrollDots from "../ScrollDots";
 
 /* ------------------------------------------------------------------ */
 /* the hero — type on the left, the world on the right                  */
@@ -130,15 +131,11 @@ function ScrollCue() {
   return (
     <div
       ref={ref}
-      className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-3 text-white/60"
+      className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center text-white"
       style={{ opacity: 0 }}
     >
-      <span className="text-[10px] font-medium uppercase tracking-[0.42em]">
-        {HERO.cue}
-      </span>
-      <span className="relative block h-12 w-px overflow-hidden bg-white/15">
-        <span className="cue-line absolute left-0 top-0 h-4 w-px bg-white/80" />
-      </span>
+      <span className="sr-only">{HERO.cue}</span>
+      <ScrollDots />
     </div>
   );
 }

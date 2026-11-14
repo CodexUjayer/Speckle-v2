@@ -7,6 +7,7 @@
  *  `ScanStatusStrip` draws it, in the light left panel or on the dark dock. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dots } from "@/components/BigLoader";
+import "./scan-status.css";
 import { fmtDur, plainStage } from "./ScanPanel";
 import type { RunState } from "@/lib/types";
 import type { AreaTile } from "./ScanPanel";
@@ -189,9 +190,9 @@ export function ScanStatusStrip(props: {
       role="status" aria-live="polite" data-testid="scan-status" data-phase={s.phase}
       className={`ss-box ${dark ? "ss-dark" : "ss-light"}`}
     >
-      <p className="ss-head">
-        <span className="ss-title">{head}</span>
-        <Dots className="ss-dots text-[10px]" />
+      <p className="ss-head flex items-center gap-2">
+        <span className="ss-title min-w-0 truncate">{head}</span>
+        <Dots className="ss-dots ml-1 shrink-0 text-[10px]" />
       </p>
       <p className="ss-facts">{facts}</p>
       <div
@@ -202,10 +203,10 @@ export function ScanStatusStrip(props: {
         {s.pct == null ? <span className="ss-indet" /> : <span className="ss-fill" style={{ width: `${s.pct}%` }} />}
       </div>
       {s.mb != null && (
-        <div className="ss-data" data-testid="scan-data">
+        <div className="ss-data flex items-baseline gap-2" data-testid="scan-data">
           <span className="ss-mb"><CountUp value={s.mb} /></span>
           <span className="ss-mbl">downloaded</span>
-          <span className="ss-grow" />
+          <span className="ss-grow flex-1" />
           {s.history && <Spark values={s.history} />}
         </div>
       )}

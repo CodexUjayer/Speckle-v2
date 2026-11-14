@@ -666,10 +666,16 @@ export default function GlobeApp() {
       const entry = layerCache.current.get(`${resultsRunId ? "live" : "cached"}|${sourceId}|${o.pipeline}|${o.layer}`);
       if (entry) specs.push({ id: `overlay:${key}`, dataUrl: entry.dataUrl, bounds: entry.bounds, opacity: o.opacity });
     }
-    specs.push(...areaLayers.specs);           // one layer from every finished tile of an area scan
+    // one layer from every finished tile of an area scan; the tile that is open already draws the same layer
+    // through `overlays`, so its area copy is left out (two copies of one picture would stack and look denser)
+    const openPrefix = selectedTile ? `area:${selectedTile}:` : null;
+    for (const a of areaLayers.specs) {
+      if (openPrefix && a.id.startsWith(openPrefix) && overlays[a.id.slice(openPrefix.length)]) continue;
+      specs.push(a);
+    }
     if (sarSpec) specs.push(sarSpec);          // a SAR image of a selected granule sits on top
     return specs;
-  }, [overlays, resultsRunId, cachedResults, sarSpec, areaLayers.specs]);
+  }, [overlays, resultsRunId, cachedResults, sarSpec, areaLayers.specs, selectedTile]);
 
   const pins: { tile: string; lon: number; lat: number; tier: string; label: string }[] = useMemo(() => {
     const out: { tile: string; lon: number; lat: number; tier: string; label: string }[] = [];

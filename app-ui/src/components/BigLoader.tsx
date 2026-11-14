@@ -7,7 +7,7 @@
 /** Three bouncing dots. `className` sets the colour (they use currentColor) and, via text size, how big they are. */
 export function Dots({ className = "" }: { className?: string }) {
   return (
-    <span aria-hidden className={`inline-flex items-end gap-1 ${className}`}>
+    <span aria-hidden className={`inline-flex shrink-0 items-end gap-1 ${className}`}>
       {[0, 150, 300].map((d) => (
         <span key={d} className="h-[0.55em] w-[0.55em] rounded-full bg-current motion-safe:animate-bounce"
               style={{ animationDelay: `${d}ms`, animationDuration: "0.9s" }} />

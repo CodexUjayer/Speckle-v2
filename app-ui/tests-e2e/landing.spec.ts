@@ -53,10 +53,10 @@ test("shared nav offers Landing · Map · Background from the landing page", asy
   await expect(nav.getByRole("link", { name: "Background" })).toBeVisible();
 });
 
-test("the cinematic landing owns / and its way in leads to the console", async ({ page }) => {
+test("the cinematic landing owns / and its \"Go and play\" button leads to the map", async ({ page }) => {
   await page.goto("/");
-  const cta = page.locator('a[href="/console"]').first();
+  const cta = page.getByRole("link", { name: /go and play/i });
   await expect(cta).toBeAttached({ timeout: 20_000 });
-  await page.goto("/console");
-  await expect(page).toHaveURL(/\/console$/);
+  await expect(cta).toHaveAttribute("href", "/map");
+  await expect(cta).not.toHaveAttribute("target", "_blank");
 });

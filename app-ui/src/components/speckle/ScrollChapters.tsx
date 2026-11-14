@@ -37,8 +37,8 @@ import {
   PIPELINES,
   FINALE,
   THEMES,
-  type Sector,
-} from "./data";
+  type Sector, linkProps } from "./data";
+import ScrollDots from "./ScrollDots";
 import { cinematify, prefersReducedMotion } from "./sections/anim";
 import Innovation from "./sections/Innovation";
 import Architecture from "./sections/Architecture";
@@ -108,8 +108,7 @@ function SystemText({ sector }: { sector: Sector }) {
       <div className="mt-9 flex flex-wrap items-center gap-4">
         <a
           href={sector.cta.href}
-          target="_blank"
-          rel="noreferrer noopener"
+          {...linkProps(sector.cta.href)}
           className={`group inline-flex items-center gap-2.5 rounded-full px-6 py-3.5 text-[12px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)] ${
             sector.status === "live"
               ? "bg-white text-[#0a1220] hover:bg-[var(--accent)]"
@@ -684,18 +683,7 @@ export default function ScrollChapters() {
           >
             {CHAPTER_4_INTRO.body}
           </p>
-          <div
-            data-reveal
-            aria-hidden
-            className="mt-14 flex flex-col items-center gap-3"
-          >
-            <span className="text-[10px] font-medium uppercase tracking-[0.42em] text-white/55">
-              {CHAPTER_4_INTRO.cue}
-            </span>
-            <span className="relative block h-12 w-px overflow-hidden bg-white/15">
-              <span className="cue-line absolute left-0 top-0 h-4 w-px bg-white/80" />
-            </span>
-          </div>
+          <div data-reveal aria-hidden className="mt-14 flex justify-center text-white"><ScrollDots /></div>
         </div>
       </div>
 
@@ -906,8 +894,7 @@ export default function ScrollChapters() {
           <div data-reveal className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
             <a
               href={FINALE.primary.href}
-              target="_blank"
-              rel="noreferrer noopener"
+              {...linkProps(FINALE.primary.href)}
               className="group inline-flex items-center gap-2.5 rounded-full bg-white px-8 py-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#0a1220] transition-all duration-300 hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]"
             >
               {FINALE.primary.label}

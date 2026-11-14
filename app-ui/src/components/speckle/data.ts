@@ -11,13 +11,20 @@ import { TL } from "./scroll";
 export const REPO_URL = "https://github.com/Tech-Doomsday/Dancing_With_SARs";
 
 /**
- * Entry point of the real application (the hazard console built with the
- * engine). When this landing page is merged into the repository, set
- * NEXT_PUBLIC_SPECKLE_APP_URL to the deployed app-ui entry (e.g. "/console").
- * Until then the repository itself is the honest destination.
+ * Entry point of the real application: the Map (the globe app, `/map`).
+ * Every "go and play" call to action on the landing leads here. Set
+ * NEXT_PUBLIC_SPECKLE_APP_URL only to point the landing at a deployment
+ * hosted elsewhere.
  */
 export const APP_URL =
-  process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || REPO_URL;
+  process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || "/map";
+
+/** Props for an <a>: a link inside this app opens in the same tab, an outside one in a new tab. */
+export function linkProps(href: string) {
+  return /^https?:\/\//.test(href)
+    ? ({ target: "_blank", rel: "noreferrer noopener" } as const)
+    : ({} as const);
+}
 
 export const LINKS = {
   app: APP_URL,

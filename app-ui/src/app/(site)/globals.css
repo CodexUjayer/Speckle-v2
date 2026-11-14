@@ -230,22 +230,106 @@ html.speckle-root ::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* scroll cue — a slow falling thread of light */
-.cue-line {
-  animation: cue-fall 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+/* scroll cue — three dots that bounce down in turn (ScrollDots.tsx) */
+.cue-dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
 }
-@keyframes cue-fall {
-  0% {
-    transform: translateY(-120%);
-  }
-  60%,
+.cue-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.25;
+  animation: cue-dot 1.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.cue-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.cue-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes cue-dot {
+  0%,
   100% {
-    transform: translateY(320%);
+    transform: translateY(-3px);
+    opacity: 0.2;
+  }
+  35% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+  65% {
+    transform: translateY(0);
+    opacity: 0.35;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cue-line {
+  .cue-dot {
     animation: none;
+  }
+  .cue-dot:nth-child(2) {
+    opacity: 0.5;
+  }
+  .cue-dot:nth-child(3) {
+    opacity: 0.8;
+  }
+}
+
+/* "Go and play" — the nav button that leads into the Map (Nav.tsx) */
+.play-btn {
+  transition:
+    transform 0.35s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.35s ease,
+    background-color 0.3s ease;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 6px 22px -8px rgba(125, 211, 252, 0.55);
+}
+.play-btn:hover,
+.play-btn:focus-visible {
+  transform: translateY(-1px) scale(1.045);
+  background-color: var(--accent, #7dd3fc);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 10px 34px -6px var(--accent, #7dd3fc);
+}
+.play-btn:active {
+  transform: scale(0.98);
+}
+/* a soft ring that breathes out from the button, so the eye finds it */
+.play-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55);
+  animation: play-halo 2.6s ease-out infinite;
+}
+.play-btn:hover .play-halo {
+  animation: none;
+}
+.play-icon {
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.play-btn:hover .play-icon {
+  transform: scale(1.12) rotate(-6deg);
+}
+@keyframes play-halo {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(255, 255, 255, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-halo {
+    animation: none;
+  }
+  .play-btn,
+  .play-icon {
+    transition: none;
   }
 }
 
