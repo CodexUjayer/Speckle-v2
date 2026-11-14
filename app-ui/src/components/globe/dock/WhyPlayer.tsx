@@ -22,6 +22,8 @@ import type { OverlaySpec } from "../GlobeMap";
 import type { TimelineSelection } from "../GranuleTimeline";
 
 const DWELL_MS = 5200;
+/** a layer counts as drawn once the map has had time to take the picture and finish its fade-in (GlobeMap's OVERLAY_FADE_MS is 420) */
+const SETTLE_MS = 480;
 
 const gapDays = (a: string | null, b: string | null) => {
   const x = Date.parse(a ?? ""), y = Date.parse(b ?? "");
@@ -138,11 +140,15 @@ export default function WhyPlayer(props: WhyPlayerProps) {
     let alive = true;
     live.current.onOverlay(null);
     void (async () => {
+      // coming back to a step: it is not drawn until it has been drawn again (no skeleton-free caption, no early boxes)
+      setLayerState((m) => (m[key]?.ready ? { ...m, [key]: { ready: false, body: m[key].body } } : m));
       const err = await live.current.showLayer(pipeline, layer);
       if (!alive) return;
       if (err) { setLayerState((m) => ({ ...m, [key]: { ready: true, err } })); return; }
       let body: string | undefined;
       try { body = describeLayer(await live.current.loadLayer(pipeline, layer)) || undefined; } catch { /* the caption stays empty: nothing is invented */ }
+      if (!alive) return;
+      if (!live.current.reducedMotion) await new Promise<void>((r) => setTimeout(r, SETTLE_MS));   // let the map draw it before boxes and the timer start
       if (!alive) return;
       setLayerState((m) => ({ ...m, [key]: { ready: true, body } }));
     })();

@@ -168,7 +168,6 @@ class EarthquakeCfg:
     merge_geometries: bool = True              # also build the merged ascending + descending layers (detected_merged, geometry_coverage, ...)
     merge_decompose: bool = True               # event mode only: solve east + up motion where both geometries saw a pixel
     merge_min_geometry_det: float = 0.3        # |det| of the 2x2 look-vector matrix must reach this, else the east/up solve is ill-conditioned there
-    mechanism_lookup_max: int = 10             # ComCat's event LIST carries no moment tensor: look up this many ranked events one by one (0 = off)
 
 
 @dataclass(frozen=True)

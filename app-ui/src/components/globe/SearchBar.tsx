@@ -96,7 +96,7 @@ export default function SearchBar(props: SearchBarProps) {
   const chip = "rounded-full border border-[#e2ddd2] bg-[#f3efe7] px-3 py-1 text-[11px] text-[#4a443c] hover:border-[#2c5f58] disabled:cursor-not-allowed disabled:text-[#8a837b]";
   const chipOn = "rounded-full border border-[#1c1a17] bg-[#1c1a17] px-3 py-1 text-[11px] text-[#faf9f6]";
   return (
-    <div className="pointer-events-auto w-full rounded-2xl border border-[#e7e2da] bg-[#faf9f6]/95 p-3 backdrop-blur">
+    <div className="pointer-events-auto w-[min(92vw,340px)] rounded-2xl border border-[#e7e2da] bg-[#faf9f6]/95 p-3 backdrop-blur">
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex items-end gap-2">
         <label className="flex-1 text-[11px] font-medium text-[#4a443c]">
           Latitude
@@ -111,16 +111,10 @@ export default function SearchBar(props: SearchBarProps) {
         <button type="submit" className="h-[34px] rounded-lg bg-[#1c1a17] px-3.5 text-xs font-semibold text-[#faf9f6] hover:bg-[#2c5f58]">Go</button>
       </form>
       {err && <p role="alert" className="mt-2 text-[11px] text-[#9e3b2c]">{err}</p>}
-      {props.rangeNote && (props.rangeBad || props.rangeNote.length <= 90 ? (
+      {props.rangeNote && (
         <p role={props.rangeBad ? "alert" : undefined}
            className={`mt-2 text-[11px] ${props.rangeBad ? "text-[#9e3b2c]" : "text-[#6b655d]"}`}>{props.rangeNote}</p>
-      ) : (
-        /* a long note folds to its first sentence so it cannot push the scan controls out of a narrow panel */
-        <details className="mt-2 text-[11px] text-[#6b655d]">
-          <summary className="cursor-pointer select-none">{props.rangeNote.split(/(?<=[.:])\s/)[0]} <span className="underline">more</span></summary>
-          <p className="mt-1">{props.rangeNote}</p>
-        </details>
-      ))}
+      )}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <button type="button" onClick={locate} disabled={busy || geo === "unavailable" || geo === "denied"}
           title={geo === "denied" ? "Location permission was denied" : undefined} className={chip}>
@@ -135,17 +129,17 @@ export default function SearchBar(props: SearchBarProps) {
           {props.flat ? "Show globe" : "Show flat map"}
         </button>
       </div>
-      {props.onRange && (
-        <label className="mt-2.5 block text-[11px] font-medium text-[#4a443c]"
-               title="Side length of the square box around the pin, in km. Empty means the engine's own tile (about 10 km).">
-          Scan box size in km
-          <input suppressHydrationWarning value={props.range ?? ""} onChange={(e) => props.onRange?.(e.target.value)}
-            inputMode="decimal" autoComplete="off" placeholder="the engine's tile" className={field} aria-label="Box range in km (side length)" />
-        </label>
-      )}
       <details className="mt-2 text-[11px] text-[#4a443c]">
-        <summary className="cursor-pointer select-none py-0.5 text-[#6b655d]">More options (camera, 3D)</summary>
+        <summary className="cursor-pointer select-none py-0.5 text-[#6b655d]">More options</summary>
         <div className="mt-2 space-y-2">
+          {props.onRange && (
+            <label className="block text-[11px] font-medium text-[#4a443c]"
+                   title="Side length of the square box around the pin, in km. Empty means the engine's own tile (about 10 km).">
+              Scan box size in km
+              <input suppressHydrationWarning value={props.range ?? ""} onChange={(e) => props.onRange?.(e.target.value)}
+                inputMode="decimal" autoComplete="off" placeholder="the engine's tile" className={field} aria-label="Box range in km (side length)" />
+            </label>
+          )}
           {props.terrain3d && props.onView && (
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="3D camera">
               <button type="button" onClick={() => props.onView?.({ pitch: 0 })} className={chip}>Top-down</button>

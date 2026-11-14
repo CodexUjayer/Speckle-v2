@@ -253,37 +253,3 @@ def test_live_comcat_query_detail_and_shakemap():
     if detail.get("event"):
         ext = r2_shakemap.fetch_extent(detail["event"]["id"], tile_bbox=[-118.5, 33.8, -118.1, 34.2])
         assert {"event_id", "available", "bbox", "note", "degraded", "error"} <= set(ext)
-
-
-# --------------------------------------------------------------------------- #
-# Real list-feed shape: NO `products`, only the `types` string (the earlier FEATURE fixture hid this)
-# --------------------------------------------------------------------------- #
-def _summary_feature(event_id: str, types: str) -> dict:
-    return {
-        "id": event_id,
-        "properties": {"mag": 7.0, "place": "191 km ENE of Nagqu, China", "time": 1792679620000,
-                       "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{event_id}",
-                       "types": types},
-        "geometry": {"coordinates": [93.78, 32.381, 18.0]},
-    }
-
-
-def test_list_feed_has_no_nodal_planes_but_says_whether_a_mechanism_exists():
-    with_mt = r1_comcat.parse_event_feature(_summary_feature("us-list-mt", ",moment-tensor,origin,shakemap,"))
-    without = r1_comcat.parse_event_feature(_summary_feature("us-list-nomt", ",origin,phase-data,"))
-    assert with_mt["nodal_planes"] == [] and with_mt["has_mechanism"] is True
-    assert without["nodal_planes"] == [] and without["has_mechanism"] is False
-
-
-def test_event_detail_returns_nodal_planes_from_the_moment_tensor_product(monkeypatch):
-    detail = {
-        "id": "us-detail-mt",
-        "properties": {"mag": 7.0, "time": 1792679620000, "products": {"moment-tensor": [{"properties": {
-            "nodal-plane-1-strike": "250.0", "nodal-plane-1-dip": "80.0", "nodal-plane-1-rake": "-5.0",
-            "nodal-plane-2-strike": "341.0", "nodal-plane-2-dip": "85.0", "nodal-plane-2-rake": "-170.0"}}]}},
-        "geometry": {"coordinates": [93.78, 32.381, 18.0]},
-    }
-    monkeypatch.setattr(r1_comcat, "_http_get_json", lambda url, t: (detail, "c" * 64))
-    out = r1_comcat.fetch_event_detail("us-detail-mt")
-    assert out["error"] is None
-    assert out["event"]["nodal_planes"] == [(250.0, 80.0, -5.0), (341.0, 85.0, -170.0)]

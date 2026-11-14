@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl, { type Map as MlMap, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { seamSplits } from "@/lib/raster";
+import { TIER_PIN_COLORS } from "@/lib/status";
 import { overlaySpecIdOfSource } from "@/lib/overlayIds";
 import { DEFAULT_CAMERA, initialCamera, loadCamera, saveCamera } from "@/lib/camera";
 import "./globe-overrides.css";
@@ -249,6 +250,7 @@ export default function GlobeMap(props: GlobeMapProps) {
         paint: {
           "circle-color": ["get", "color"],
           "circle-radius": 7,
+          "circle-pitch-scale": "viewport",     // same size near and far in the tilted 3D view
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
@@ -446,7 +448,7 @@ export default function GlobeMap(props: GlobeMapProps) {
       type: "FeatureCollection",
       features: props.pins.map((p) => ({
         type: "Feature" as const,
-        properties: { tile: p.tile, color: p.tier, label: p.label },
+        properties: { tile: p.tile, color: TIER_PIN_COLORS[p.tier] ?? TIER_PIN_COLORS.insufficient, label: p.label },   // MapLibre needs a colour, not the tier name
         geometry: { type: "Point" as const, coordinates: [p.lon, p.lat] },
       })),
     });

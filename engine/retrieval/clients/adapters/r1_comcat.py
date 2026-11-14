@@ -86,14 +86,6 @@ def _parse_nodal_planes(properties: dict) -> list:
     return planes
 
 
-def _has_mechanism(properties: dict) -> bool | None:
-    """True / False from the summary feed's `types` string; None when the feed did not say (e.g. detail-shaped input)."""
-    types = properties.get("types")
-    if not isinstance(types, str):
-        return True if (properties.get("products") or {}).keys() & {"focal-mechanism", "moment-tensor"} else None
-    return any(k in types for k in ("moment-tensor", "focal-mechanism"))
-
-
 def parse_event_feature(feature: dict) -> dict | None:
     """GeoJSON feature -> event dict (None when the feature is unusable)."""
     try:
@@ -119,9 +111,6 @@ def parse_event_feature(feature: dict) -> dict | None:
             "depth_km": (float(depth_km) if depth_km is not None else None),
             "url": props.get("url"),
             "nodal_planes": _parse_nodal_planes(props),
-            # The list (summary) feed has NO `products`, so nodal_planes above is empty for real list results. It does carry
-            # `types`, a comma string such as ",moment-tensor,origin,shakemap,", which says whether a detail lookup can pay off.
-            "has_mechanism": _has_mechanism(props),
         }
     except (TypeError, ValueError, KeyError):
         return None

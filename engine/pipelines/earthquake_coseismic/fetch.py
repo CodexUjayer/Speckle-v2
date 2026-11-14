@@ -11,7 +11,6 @@ provenance (adapter, url/id, retrieved_at, sha256) that flows into PipelineResul
 """
 from __future__ import annotations
 
-import dataclasses
 from datetime import datetime, timedelta, timezone
 
 from engine.common.result import Source
@@ -93,44 +92,6 @@ def fetch_events(bbox, ref_time: str | None, sec_time: str | None, params,
     return EventsResult(events=events, source=out.get("source", "usgs-comcat"),
                         degraded=bool(out.get("degraded")), error=out.get("error"),
                         provenance=provenance)
-
-
-def enrich_mechanisms(ranked, params, providers: dict | None = None):
-    """Fill in the nodal planes of in-window events. -> (new ranked list, looked_up ids, notes).
-
-    ComCat's event LIST carries no moment tensor (those live in the per-event record), so on the real path every
-    event arrives without nodal planes and the forward screen cannot run. Here the ranked events (largest first) that
-    lack planes, and that the list says DO have a mechanism, are looked up one by one, at most
-    params.mechanism_lookup_max of them (config/common.yaml earthquake.mechanism_lookup_max).
-
-    Resolution mirrors fetch_events: providers["event_detail"](event_id) -> fetch_event_detail-shaped dict, else the real
-    adapter. When the EVENTS themselves came from an injected provider / the module seam (tests, debug) and no
-    event_detail provider was injected, nothing is looked up: an offline run never reaches for the network.
-    A failed lookup is a note, never an exception, and the event keeps its (empty) planes.
-    """
-    detail_fn = (providers or {}).get("event_detail")
-    if detail_fn is None:
-        if (providers or {}).get("events") is not None or _provider is not None:
-            return list(ranked), [], []
-        from engine.retrieval.clients.adapters import r1_comcat
-        detail_fn = r1_comcat.fetch_event_detail
-    budget = max(0, int(params.mechanism_lookup_max))
-    out, looked_up, notes = [], [], []
-    for ev, dist in ranked:
-        if budget > 0 and not ev.nodal_planes and ev.has_mechanism is not False:
-            budget -= 1
-            try:
-                res = detail_fn(ev.id) or {}
-            except Exception as exc:                                   # noqa: BLE001 - reported, never raised
-                res = {"error": f"{type(exc).__name__}: {exc}"}
-            found = (res.get("event") or {}).get("nodal_planes") or ()
-            if found:
-                ev = dataclasses.replace(ev, nodal_planes=tuple(tuple(float(c) for c in p) for p in found))
-                looked_up.append(ev.id)
-            elif res.get("error") or res.get("degraded"):
-                notes.append(f"moment-tensor lookup for event {ev.id} failed: {res.get('error') or 'provider degraded'}")
-        out.append((ev, dist))
-    return out, looked_up, notes
 
 
 def fetch_shakemap_note(best_event_id: str | None, providers: dict | None = None,

@@ -9,6 +9,9 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const cacheConfigured = Boolean(URL_BASE && ANON_KEY);
 
 const enc = encodeURIComponent;
+const TILES_PER_QUERY = 40;     // keeps the request URL short however big the scan box is
+const PAGE_ROWS = 1000;         // rows per request (PostgREST's usual cap)
+const MAX_PAGES = 10;           // per chunk: 10 000 rows is far beyond any real area; a hard stop, not a silent one-page cut
 const LIGHT =
   "tile,pipeline,bundle_id,epoch,status,tier,raw_p,summary,run_id,computed_at,first_computed_at,"
   + "center_lon,center_lat,bbox_lonlat";
@@ -80,6 +83,28 @@ export const cache = {
     const m = range ? /\/(\d+|\*)$/.exec(range) : null;
     if (m) total = m[1] === "*" ? null : Number(m[1]);
     return { rows, total };
+  },
+
+  /** Every cached verdict (light columns, newest first within each tile) for a set of tiles: the earlier scans of an area.
+   *  A tile has one row per pipeline per scan, so one capped query silently dropped the tiles whose only results are
+   *  older. The tiles go in chunks (short URLs) and each chunk is read page by page until it runs out. */
+  forTiles: async (tiles: string[]): Promise<CachedSummary[]> => {
+    if (tiles.length === 0) return [];
+    const ids = tiles.map(assertTileId);                 // validates every id before anything is sent
+    const chunks: string[] = [];
+    for (let i = 0; i < ids.length; i += TILES_PER_QUERY) chunks.push(ids.slice(i, i + TILES_PER_QUERY).join(","));
+    const perChunk = await Promise.all(chunks.map(async (inList) => {
+      const rows: CachedSummary[] = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const got = await rest<CachedSummary[]>(
+          `select=${LIGHT}&tile=in.(${inList})&order=computed_at.desc,bundle_id.desc,pipeline.asc&limit=${PAGE_ROWS}&offset=${page * PAGE_ROWS}`,
+        );
+        rows.push(...got);
+        if (got.length < PAGE_ROWS) break;
+      }
+      return rows;
+    }));
+    return perChunk.flat().sort((a, b) => Date.parse(b.computed_at) - Date.parse(a.computed_at) || 0);
   },
 
   /** Every cached verdict for ONE tile (light columns; keyed by the server's tile id). */

@@ -34,6 +34,8 @@ export default function OverlayStrip(props: {
   choices: PairChoice[];
   extra: PairChoice | null;
   onExtra: (key: string | null) => void;
+  /** the chosen picture for the scan box's other tiles: how many are drawn (null = not asked for) */
+  area?: { total: number; drawn: number; failed: number; busy: boolean } | null;
 }) {
   const { groups } = props;
   const hardError = groups.map((g) => g.d.invError).find(Boolean) ?? null;
@@ -77,6 +79,14 @@ export default function OverlayStrip(props: {
           <span className="vd-chip" data-state="busy" aria-live="polite">
             {reading ? "Reading the passes" : totals.done < totals.n ? `Drawing ${totals.done} of ${totals.n}` : "Getting ready"}
             <Dots className="ml-2 text-[8px]" />
+          </span>
+        )}
+
+        {props.area && props.area.total > 0 && (
+          <span className="vd-chip" data-state={props.area.busy ? "busy" : undefined} aria-live="polite" data-testid="area-diff-status">
+            {`Other tiles: ${props.area.drawn} of ${props.area.total} drawn`}
+            {props.area.failed > 0 ? ` · ${props.area.failed} not covered by these passes` : ""}
+            {props.area.busy && <Dots className="ml-2 text-[8px]" />}
           </span>
         )}
 

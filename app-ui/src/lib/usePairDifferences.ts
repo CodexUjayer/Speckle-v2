@@ -18,6 +18,9 @@ export interface DiffTile { id: string; layerKey: string; layerLabel: string; mo
 export interface DiffThumb { status: "wait" | "busy" | "ok" | "err"; url?: string; meta?: PreviewMeta; message?: string }
 
 const MAX_PX = 640;
+/** one picture may wait this long (the engine reads one file at a time and the wait itself has no limit): past it the picture
+ *  is given up as failed so the ones behind it still load and the tour can finish. "Retry" asks again. */
+const TILE_TIMEOUT_MS = 5 * 60_000;
 const layersOf = (inv: Inv | null | undefined): InvLayer[] =>
   (inv?.grids ?? []).flatMap((g) => g.layers).filter((l) => l.previewable);
 const msOf = (iso: string | null) => { const t = Date.parse(iso ?? ""); return Number.isFinite(t) ? t : 0; };
@@ -107,12 +110,17 @@ export function usePairDifferences(
         if (!t) return;
         done.add(t.id);
         setThumbs((s) => ({ ...s, [t.id]: { status: "busy" } }));
+        const tileCtrl = new AbortController();
+        const onOuter = () => tileCtrl.abort();
+        ctrl.signal.addEventListener("abort", onOuter, { once: true });
+        let tileTimedOut = false;
+        const tileTimer = setTimeout(() => { tileTimedOut = true; tileCtrl.abort(); }, TILE_TIMEOUT_MS);
         try {
           const { blob, meta } = await bg.diffBlob({
             idA: first.id, idB: second.id, layer: t.layerKey,
             west: box[0], south: box[1], east: box[2], north: box[3],
             maxPx: MAX_PX, mode: t.mode, cmap: "auto", patient: true,
-          }, ctrl.signal);
+          }, tileCtrl.signal);
           if (ctrl.signal.aborted) return;
           if (!blob || !meta.corners_lonlat) {
             setThumbs((s) => ({ ...s, [t.id]: { status: "err", meta, message: meta.corners_note ?? "The engine returned no placed picture for this difference." } }));
@@ -123,11 +131,18 @@ export function usePairDifferences(
           setThumbs((s) => ({ ...s, [t.id]: { status: "ok", url, meta } }));
         } catch (err) {
           if (ctrl.signal.aborted) return;
-          setThumbs((s) => ({ ...s, [t.id]: { status: "err", message: err instanceof Error ? err.message : String(err) } }));
+          const message = tileTimedOut
+            ? `The engine did not finish this picture within ${Math.round(TILE_TIMEOUT_MS / 60_000)} minutes, so it was skipped. Retry to ask again.`
+            : err instanceof Error ? err.message : String(err);
+          setThumbs((s) => ({ ...s, [t.id]: { status: "err", message } }));
+        } finally {
+          clearTimeout(tileTimer);
+          ctrl.signal.removeEventListener("abort", onOuter);
         }
       }
     })();
-    return () => { ctrl.abort(); urls.forEach((u) => URL.revokeObjectURL(u)); };
+    // revoke late: the map may still be loading or fading out a picture from one of these URLs
+    return () => { ctrl.abort(); setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 3000); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [first?.id, second?.id, tilesKey, bboxKey, nonce]);
 
@@ -138,7 +153,8 @@ export function usePairDifferences(
   return {
     first, second, tiles, thumbs, explain, invError, mismatch,
     reading: active && !invs && !invError,
-    finished: !!invs && (tiles.length === 0 || nDone >= tiles.length),
+    // no box to draw in means nothing will ever load: that is finished, not "still coming" (the tour would wait forever)
+    finished: !!invs && (tiles.length === 0 || !bbox || nDone >= tiles.length),
     nDone, undefinedCount,
     retry: () => { setNonce((n) => n + 1); },
   };
