@@ -6,6 +6,7 @@
  *  Display only: the pictures, their names' modes, their order of validity all come from the engine via
  *  usePairDifferences; this file lays them out. */
 import { useMemo } from "react";
+import { Dots } from "@/components/BigLoader";
 import type { DiffTile, PairDifferences } from "@/lib/usePairDifferences";
 import { MODE_NAME, modeRank } from "@/lib/diffModes";
 import type { PairChoice } from "@/lib/otherPairs";
@@ -75,6 +76,7 @@ export default function OverlayStrip(props: {
         {(reading || totals.done < totals.n || pending) && !hardError && (
           <span className="vd-chip" data-state="busy" aria-live="polite">
             {reading ? "Reading the passes" : totals.done < totals.n ? `Drawing ${totals.done} of ${totals.n}` : "Getting ready"}
+            <Dots className="ml-2 text-[8px]" />
           </span>
         )}
 

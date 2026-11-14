@@ -31,6 +31,7 @@ import AppNav from "./AppNav";
 import Legend, { MapKey } from "./Legend";
 import AreasPanel from "./AreasPanel";
 import ScanPanel from "./ScanPanel";
+import { ScanStatusStrip, scanStatusFrom, useScanTraffic } from "./ScanStatus";
 import FindingsPanel, { type LayerSource } from "./FindingsPanel";
 import { verdictUseFrom } from "@/lib/verdictUse";
 import DataPanel from "./DataPanel";
@@ -145,6 +146,8 @@ export default function GlobeApp() {
 
   // ---- run + results state ------------------------------------------------------------------
   const [scanRunId, setScanRunId] = useState<string | null>(null);
+  /** Scan pressed, engine has not named a run yet: the status strip says so instead of showing nothing */
+  const [starting, setStarting] = useState(false);
   const [runState, setRunState] = useState<RunState | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [busyRunId, setBusyRunId] = useState<string | null>(null);
@@ -709,14 +712,17 @@ export default function GlobeApp() {
     (lon: number, lat: number) => {
       setRunError(null);
       setBusyRunId(null);
+      setStarting(true);
       api
         .startScan(lon, lat)
         .then((r) => {
+          setStarting(false);
           setScanRunId(r.run_id);
           setPanel("pin");
           pushUrl({ scan: r.run_id, panel: "pin" });
         })
         .catch((e) => {
+          setStarting(false);
           const message = e instanceof Error ? e.message : String(e);
           setRunError(message);
           const m = /run-[0-9a-f]{12}/.exec(message);
@@ -802,15 +808,22 @@ export default function GlobeApp() {
   );
   const dockVerdictUse = useMemo(() => verdictUseFrom(openResults ?? []), [openResults]);
   const scanning = !!scanRunId && !!runState && (runState.status === "queued" || runState.status === "running");
-  const scanProgress = (runState?.progress as { stage?: string } | undefined)?.stage ?? null;
+  // the run id is known but its first poll has not come back yet (or the queue is between two tiles): still "starting", never blank
+  const rawScanStatus = useMemo(
+    () => scanStatusFrom({ runState, queue, starting: starting || (!!scanRunId && !runState && !runError) }),
+    [runState, queue, starting, scanRunId, runError],
+  );
+  const scanStatus = useScanTraffic(rawScanStatus);   // + MB downloaded by the whole scan and the recent MB/s
+  const stopAreaScan = useCallback(() => { stopRef.current = true; }, []);
   const scanOffer = {
     canScan: engineOnline && !!health?.scans_enabled && health?.earthdata_credentials !== "absent",
     reason: !engineOnline ? "The engine is offline, so scanning is not available."
       : !health?.scans_enabled ? "Scans are switched off on this engine (set NISAR_ENABLE_SCANS=1)."
         : health?.earthdata_credentials === "absent" ? "The engine has no Earthdata credentials, so it cannot read the radar archive."
           : null,
-    running: scanning,
-    stage: scanning ? (scanProgress ?? "Working") : null,
+    running: scanning || !!scanStatus,
+    stage: scanStatus ? scanStatus.stage : null,
+    status: scanStatus,
     error: runError,
     onScan: () => { if (pin) startScan(pin[1], pin[0]); },
   };
@@ -1088,7 +1101,7 @@ export default function GlobeApp() {
 
   return (
     <div
-      className={`globe-root fixed inset-0 bg-[#0b0d12]${activeOverlayLegend ? " legend-open" : ""}`}
+      className={`globe-root fixed inset-0 bg-[#0b0d12]${activeOverlayLegend ? " legend-open" : ""}${dataOpen && !isNarrow && !immersive ? " details-open" : ""}`}
       style={{ ["--dock-h" as string]: `${dockH}px` }}
     >
       <GlobeMap
@@ -1128,6 +1141,11 @@ export default function GlobeApp() {
         onWebglUnavailable={setWebglMsg}
       />
 
+      {/* a thin line along the top while anything is loading: a scan, the tile lookup, the radar-pass search, a saved verdict */}
+      {(!!scanStatus || tileLoading || areaPlan.loading || granules.loading || (!!tileId && cacheConfigured && cachedForTile === null && !openResults)) && (
+        <div className="gb-line" aria-hidden data-testid="busy-line"><span /></div>
+      )}
+
       {webglMsg && (
         <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 w-[min(90vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#e7e2da] bg-[#faf9f6] p-4 text-sm">
           <p className="font-semibold text-[#1c1a17]">The globe cannot start</p>
@@ -1141,8 +1159,8 @@ export default function GlobeApp() {
 
       {/* left column: nav + search pill + the panel (Explore / Pin / Results); Data is its own panel on the right; on a phone everything is the bottom sheet (Data = a tab there) */}
       <div
-        className={`pointer-events-none absolute left-3 top-3 z-30 flex flex-col gap-2 transition-[transform,opacity] duration-[380ms] ease-[cubic-bezier(0.32,0.72,0,1)]${isNarrow ? "" : " w-[340px]"}${immersive ? " -translate-x-[110%] opacity-0" : ""}`}
-        style={isNarrow ? undefined : { bottom: dockH + 28 }}
+        className={`pointer-events-none absolute left-3 top-3 z-30 flex flex-col gap-2 transition-[transform,opacity] duration-[380ms] ease-[cubic-bezier(0.32,0.72,0,1)]${isNarrow ? "" : " w-[300px]"}${immersive ? " -translate-x-[110%] opacity-0" : ""}`}
+        style={isNarrow ? undefined : { bottom: 12 }}
         inert={immersive}
       >
         <div className="pointer-events-auto w-fit rounded-xl border border-[#262c36] bg-[#0e1116]/95 px-3 py-2 backdrop-blur">
@@ -1219,10 +1237,15 @@ export default function GlobeApp() {
           reducedMotion={reducedMotion}
         />
         {!engineOnline && healthChecked && (
-          <p role="status" className="pointer-events-auto w-[min(92vw,340px)] rounded-xl border border-[#b08d57]/40 bg-[#f7f2e7]/95 px-3 py-2 text-[11px] text-[#7a6438] backdrop-blur">
+          <p role="status" className="pointer-events-auto w-full rounded-xl border border-[#b08d57]/40 bg-[#f7f2e7]/95 px-3 py-2 text-[11px] text-[#7a6438] backdrop-blur">
             engine offline at <span className="mono">{engineUrl}</span> — Scan is disabled; cached
             results still open from Explore.
           </p>
+        )}
+        {!isNarrow && scanStatus && (
+          <div className="pointer-events-auto">
+            <ScanStatusStrip s={scanStatus} tone="light" onStop={queue?.some((t) => t.status === "waiting") ? stopAreaScan : undefined} />
+          </div>
         )}
         {!isNarrow && (
           <aside
@@ -1245,10 +1268,12 @@ export default function GlobeApp() {
       {/* the verdict dock: the verdict, big, with the acquisition timeline under it; "See why" plays the differences.
           On a phone it sits just above the sheet's peek. */}
       <div
-        className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-3 md:px-6"
-        style={{ bottom: isNarrow ? "calc(20vh + 12px)" : 18 }}
+        className={`pointer-events-none absolute z-30 flex justify-center ${isNarrow ? "inset-x-0 px-3" : ""}`}
+        style={isNarrow
+          ? { bottom: "calc(20vh + 12px)" }
+          : { bottom: 12, left: immersive ? 12 : 324, right: immersive ? 12 : (dataOpen ? 324 : 12), transition: "left 380ms cubic-bezier(0.32,0.72,0,1), right 380ms cubic-bezier(0.32,0.72,0,1)" }}
       >
-        <div className="w-full max-w-[1180px]">
+        <div className="w-full max-w-[920px]">
           <VerdictDock
             pinned={!!pin}
             verdict={verdict}
@@ -1285,8 +1310,8 @@ export default function GlobeApp() {
           {dataOpen ? (
             <aside
               aria-label="Data panel"
-              style={{ top: Math.max(148, legendBottom + 8), bottom: dockH + 28 }}
-              className="pointer-events-auto absolute right-3 z-30 flex w-[min(340px,calc(100vw-400px))] min-w-[300px] flex-col overflow-hidden rounded-2xl border border-[#e7e2da] bg-[#faf9f6]/97 backdrop-blur"
+              style={{ top: Math.max(148, legendBottom + 8), bottom: 12 }}
+              className="pointer-events-auto absolute right-3 z-30 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-[#e7e2da] bg-[#faf9f6]/97 backdrop-blur"
             >
               <div className="flex items-center justify-between border-b border-[#f0ece4] px-3 py-2">
                 <h2 className="text-xs font-semibold text-[#1c1a17]">Details <span className="font-normal text-[#8a837b]">for the pinned tile</span></h2>

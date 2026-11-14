@@ -4,7 +4,7 @@
  *  and the Scan control — enabled only when every precondition holds, disabled with the EXACT
  *  reason otherwise. Running state: verbatim progress stages, step_index/step_total, elapsed
  *  timer, aria-live, leave-and-return note. 409 → "engine busy" + Follow run. */
-import BigLoader, { Dots } from "@/components/BigLoader";
+import BigLoader, { Dots, MiniSpinner } from "@/components/BigLoader";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { timeAgo } from "@/lib/format";
@@ -72,7 +72,7 @@ function AreaScan(props: ScanPanelProps & { area: AreaScanProps }) {
       <h3 className="text-sm font-semibold">
         Area scan · {fitKm ? `${fitKm} × ${fitKm} km (shrunk from ${a.rangeKm})` : `${a.rangeKm} × ${a.rangeKm} km`}
       </h3>
-      {a.plan.loading && <p role="status" className="mt-1 text-[11px] text-[#8a837b]">finding the tiles this box covers…</p>}
+      {a.plan.loading && <p role="status" className="mt-1 flex items-center gap-2 text-[11px] text-[#8a837b]">finding the tiles this box covers <MiniSpinner /></p>}
       {a.plan.error && <p role="alert" className="mono mt-1 text-[11px] text-[#9e3b2c]">{a.plan.error}</p>}
       {fitKm && (
         <p role="status" className="mono mt-1 text-[11px] text-[#7a6438]">
@@ -192,7 +192,7 @@ type ScanProgress = {
   steps?: { code: string; name: string; status: string; seconds: number }[]; info?: ScanInfo;
 };
 
-const fmtDur = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`);
+export const fmtDur = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`);
 const shortId = (id: string) => (id.length > 46 ? `${id.slice(0, 22)}…${id.slice(-20)}` : id);
 
 function Progress(props: { runState: RunState; onFollow: () => void }) {
@@ -391,7 +391,7 @@ const STEP_WORDS: Record<string, string> = {
   P05: "Geometry", P06: "Phase → line of sight", P07: "Corrections", P08: "Backscatter", P09: "Ancillary layers",
   P10: "Temporal stacks", P11: "Stable mask", P12: "Routing", P13: "Provenance",
 };
-function plainStage(stage: string): string {
+export function plainStage(stage: string): string {
   const m = /^(P\d\d)\b/.exec(stage);
   return m && STEP_WORDS[m[1]] ? `${STEP_WORDS[m[1]]} (${stage})` : stage;
 }

@@ -25,6 +25,8 @@ import DockTimeline from "./DockTimeline";
 import WhyPlayer from "./WhyPlayer";
 import OverlayStrip, { chipKey, type StripGroup } from "./OverlayStrip";
 import "./verdict-dock.css";
+import { ScanStatusStrip, type ScanStatusInfo } from "../ScanStatus";
+import { Dots } from "@/components/BigLoader";
 
 export type DockMode = "verdict" | "why" | "compare";
 
@@ -35,6 +37,8 @@ export interface ScanOffer {
   running: boolean;
   /** the engine's own stage text while a scan runs */
   stage: string | null;
+  /** live facts about the running scan (tile n of m, step, elapsed, bytes): drawn as a strip at the top of the dock */
+  status?: ScanStatusInfo | null;
   error: string | null;
   onScan: () => void;
 }
@@ -293,11 +297,20 @@ export default function VerdictDock(props: VerdictDockProps) {
   return (
     <div className="vd-root" ref={rootRef}>
       <section className={`vd-sheet${compact ? " vd-compact" : ""}${isMin ? " vd-min" : ""}`} aria-label="Verdict" data-mode={mode} data-testid="verdict-dock">
+        {props.scan.status && (
+          <ScanStatusStrip
+            s={props.scan.status} tone="dark"
+            note={verdict ? "The verdict below is from an earlier scan; it updates when this one finishes." : undefined}
+          />
+        )}
         <div className="vd-head">
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               {(compact || isMin) && verdict && <span className="vd-tier" data-tone={tone}><span className="vd-tier-dot" /></span>}
-              <p className="vd-sentence" data-testid="verdict-sentence" aria-live="polite" title={isMin ? sentence : undefined}>{sentence}</p>
+              <p className="vd-sentence" data-testid="verdict-sentence" aria-live="polite" title={isMin ? sentence : undefined}>
+                {sentence}
+                {!verdict && (props.verdictLoading || scanning) && <Dots className="ml-2 align-middle text-[10px] text-[var(--vd-ink-3)]" />}
+              </p>
             </div>
             <div className="vd-meta">
               {verdict ? (
@@ -372,7 +385,12 @@ export default function VerdictDock(props: VerdictDockProps) {
 
         {showTimeline && !isMin && (
           <div className="vd-tl-wrap">
-            {tl.loading && !tl.data && <div className="vd-skel" aria-busy="true" aria-label="Looking for radar passes" />}
+            {tl.loading && !tl.data && (
+              <>
+                <div className="vd-skel" aria-busy="true" aria-label="Looking for radar passes" />
+                <p className="vd-note vd-loading" style={{ marginTop: 8 }}>Looking for radar passes over this tile <Dots className="text-[8px]" /></p>
+              </>
+            )}
             {tl.error && <p className="vd-note" role="alert">{tl.error}</p>}
             {tl.data && !hasStacks && (
               <p className="vd-note">No GUNW or GCOV passes were found over this tile in the search window.</p>
@@ -406,7 +424,7 @@ export default function VerdictDock(props: VerdictDockProps) {
                 ) : tlOpen && mode === "verdict" ? (
                   <span>{picks.selection ? "Now pick a second one in the same row to compare" : "Click two marks in a row to compare them"}</span>
                 ) : null}
-                <button type="button" className="vd-link" onClick={toggleTl} aria-expanded={tlOpen} data-testid="timeline-toggle">
+                <button type="button" className="vd-link" data-hl={tlOpen ? "0" : "1"} onClick={toggleTl} aria-expanded={tlOpen} data-testid="timeline-toggle">
                   {tlOpen ? "Hide timeline" : "Show timeline"}
                 </button>
               </div>
