@@ -28,7 +28,6 @@ import {
 import { EARTH_ROTY, EARTH_DIST } from "../earth/choreo";
 import { HERO, CHAPTER_2, CHAPTER_3 } from "../data";
 import { Overlay } from "./shared";
-import ScrollDots from "../ScrollDots";
 
 /* ------------------------------------------------------------------ */
 /* the hero — type on the left, the world on the right                  */
@@ -109,33 +108,6 @@ function Hero() {
           </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* scroll cue                                                          */
-/* ------------------------------------------------------------------ */
-
-function ScrollCue() {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    return addDriver((p) => {
-      const el = ref.current;
-      if (!el) return;
-      const o = 1 - smoothstep(0.03, 0.12, p);
-      el.style.opacity = o.toFixed(3);
-      el.style.visibility = o <= 0.01 ? "hidden" : "visible";
-    });
-  }, []);
-  return (
-    <div
-      ref={ref}
-      className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center text-white"
-      style={{ opacity: 0 }}
-    >
-      <span className="sr-only">{HERO.cue}</span>
-      <ScrollDots />
     </div>
   );
 }
@@ -315,7 +287,6 @@ export default function SpaceChapters() {
     <div className="pointer-events-none absolute inset-0">
       <div className="absolute inset-0 z-[4]">
         <Hero />
-        <ScrollCue />
         <OrbitalReadout />
       </div>
       <div className="absolute inset-0 z-[5]">

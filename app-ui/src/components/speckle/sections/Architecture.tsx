@@ -16,7 +16,6 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ArrowUpRight } from "lucide-react";
 import { ARCHITECTURE, PIPELINES, THEMES, type ArchLayer } from "../data";
-import ScrollDots from "../ScrollDots";
 import { cinematify } from "./anim";
 
 /* chips + the honest machine-room dots, shared by slab and detail */
@@ -213,7 +212,14 @@ export default function Architecture() {
         <p data-reveal className="mx-auto mt-6 max-w-xl text-sm leading-relaxed text-[#93a3ba]">
           {ARCHITECTURE.body}
         </p>
-        <div data-reveal aria-hidden className="mt-12 flex justify-center text-white"><ScrollDots /></div>
+        <div data-reveal aria-hidden className="mt-12 flex flex-col items-center gap-3">
+          <span className="text-[10px] font-medium uppercase tracking-[0.42em] text-white/55">
+            {ARCHITECTURE.cue}
+          </span>
+          <span className="relative block h-12 w-px overflow-hidden bg-white/15">
+            <span className="cue-line absolute left-0 top-0 h-4 w-px bg-white/80" />
+          </span>
+        </div>
       </div>
 
       {/* the machine — exploded on scroll, flat when it must be */}

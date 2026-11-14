@@ -2,15 +2,14 @@
 
 /**
  * Minimal navigation — the quietest possible header. The wordmark on the
- * left, the "Go and play" button (the way into the Map) on the right. Nothing else: the story
+ * left, the console entry point on the right. Nothing else: the story
  * speaks for itself, the chapter compass lives on the right edge of the
  * stage, and this bar never competes with either.
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowRight, Github, Play } from "lucide-react";
-import { LINKS } from "./data";
+import { ArrowUpRight, Github } from "lucide-react";
+import { LINKS, linkProps } from "./data";
 
 function jumpToTop() {
   const spacer = document.getElementById("speckle-story-spacer");
@@ -58,21 +57,17 @@ export default function Nav() {
           >
             <Github className="h-[15px] w-[15px]" aria-hidden />
           </a>
-          <Link
+          <a
             href={LINKS.app}
-            aria-label="Go and play: open the map"
-            className="play-btn group relative inline-flex items-center gap-2.5 rounded-full bg-white py-2 pl-2 pr-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0a1220] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent,#7dd3fc)] sm:pr-5"
+            {...linkProps(LINKS.app)}
+            className="group inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-white/80 transition-colors hover:text-white"
           >
-            <span aria-hidden className="play-halo" />
-            <span className="play-icon relative flex h-7 w-7 items-center justify-center rounded-full bg-[#0a1220] text-white">
-              <Play className="h-3 w-3 translate-x-[1px] fill-current" aria-hidden />
-            </span>
-            <span className="relative">Go and play</span>
-            <ArrowRight
-              className="relative h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1"
+            Earthquakes
+            <ArrowUpRight
+              className="h-3 w-3 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
               aria-hidden
             />
-          </Link>
+          </a>
         </div>
       </nav>
     </header>

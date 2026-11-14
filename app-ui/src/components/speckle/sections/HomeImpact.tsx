@@ -14,7 +14,7 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import { HOME, THEMES, type HomeWatch, linkProps } from "../data";
+import { HOME, THEMES, type HomeWatch } from "../data";
 import { cinematify } from "./anim";
 
 function WatchRow({ w }: { w: HomeWatch }) {
@@ -150,7 +150,8 @@ export default function HomeImpact() {
         <div data-reveal className="mt-10">
           <a
             href={HOME.cta.href}
-            {...linkProps(HOME.cta.href)}
+            target="_blank"
+            rel="noreferrer noopener"
             className="group inline-flex items-center gap-2.5 rounded-full bg-white px-8 py-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#0a1220] transition-all duration-300 hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]"
           >
             {HOME.cta.label}

@@ -30,6 +30,85 @@ import { EARTH_ROTY } from "./choreo";
 import { earthVertex, earthFragment } from "./shaders";
 
 /* ------------------------------------------------------------------ */
+/* target marker + orbit ring (Earthquake page) — presentation only:    */
+/* a mint pin on the investigated epicentre and a thin satellite ring   */
+/* that passes over it. No science lives here.                          */
+/* ------------------------------------------------------------------ */
+
+export interface StageMarker {
+  lon: number;
+  lat: number;
+}
+
+function latLonToVec3(lon: number, lat: number, r: number): THREE.Vector3 {
+  const phi = ((90 - lat) * Math.PI) / 180;
+  const theta = ((lon + 180) * Math.PI) / 180;
+  return new THREE.Vector3(
+    -r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta),
+  );
+}
+
+function TargetMarker({ marker }: { marker: StageMarker }) {
+  const halo = useRef<THREE.Mesh>(null);
+  const pos = useMemo(
+    () => latLonToVec3(marker.lon, marker.lat, 2.02),
+    [marker.lon, marker.lat],
+  );
+  useFrame((state) => {
+    if (!halo.current || storyState.reduced) return;
+    const t = state.clock.elapsedTime;
+    const s = 1 + Math.sin(t * 1.6) * 0.35;
+    halo.current.scale.setScalar(s);
+    (halo.current.material as THREE.MeshBasicMaterial).opacity =
+      0.32 - Math.sin(t * 1.6) * 0.12;
+  });
+  return (
+    <group position={pos}>
+      <mesh>
+        <sphereGeometry args={[0.022, 16, 16]} />
+        <meshBasicMaterial color="#8fd8c8" toneMapped={false} />
+      </mesh>
+      <mesh ref={halo}>
+        <sphereGeometry args={[0.05, 16, 16]} />
+        <meshBasicMaterial color="#8fd8c8" transparent opacity={0.28} depthWrite={false} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function OrbitRing({ marker }: { marker: StageMarker }) {
+  const ring = useRef<THREE.Group>(null);
+  const sat = useRef<THREE.Mesh>(null);
+  const inc = Math.min(Math.abs(marker.lat), 78) * (marker.lat < 0 ? -1 : 1);
+  const R = 2.52;
+  useFrame((state) => {
+    if (storyState.reduced) return;
+    const t = state.clock.elapsedTime;
+    if (ring.current) ring.current.rotation.y = t * 0.05;
+    if (sat.current) {
+      const a = t * 0.22;
+      sat.current.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
+    }
+  });
+  return (
+    <group rotation={[0, (marker.lon * Math.PI) / 180, 0]}>
+      <group ref={ring} rotation={[(inc * Math.PI) / 180, 0, 0]}>
+        <mesh>
+          <torusGeometry args={[R, 0.0035, 8, 220]} />
+          <meshBasicMaterial color="#a9bfd6" transparent opacity={0.32} toneMapped={false} />
+        </mesh>
+        <mesh ref={sat}>
+          <sphereGeometry args={[0.016, 12, 12]} />
+          <meshBasicMaterial color="#e8f2ff" toneMapped={false} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* the ONE camera track — hero to the cloud dive, no cuts               */
 /* ------------------------------------------------------------------ */
 
@@ -126,6 +205,7 @@ function EarthGlobe({
   groupRef,
   lightRef,
   lowPower,
+  marker,
 }: {
   textures: {
     day: THREE.Texture;
@@ -139,6 +219,7 @@ function EarthGlobe({
   groupRef: React.RefObject<THREE.Group | null>;
   lightRef: React.RefObject<THREE.DirectionalLight | null>;
   lowPower: boolean;
+  marker?: StageMarker | null;
 }) {
   const uniforms = useMemo(
     () => ({
@@ -179,6 +260,8 @@ function EarthGlobe({
             depthWrite={false}
           />
         </mesh>
+        {marker ? <TargetMarker marker={marker} /> : null}
+        {marker ? <OrbitRing marker={marker} /> : null}
       </group>
     </>
   );
@@ -192,16 +275,30 @@ function Director({
   earthTextures,
   onFirstFrame,
   lowPower,
+  marker,
+  focus = false,
 }: {
   earthTextures: Parameters<typeof EarthGlobe>[0]["textures"];
   onFirstFrame: () => void;
   lowPower: boolean;
+  marker?: StageMarker | null;
+  /** Earthquake page: rotate the globe so the marker faces the camera
+   *  (camera framing only — the story track still drives everything else) */
+  focus?: boolean;
 }) {
   const earthMat = useRef<THREE.ShaderMaterial>(null);
   const cloudsMesh = useRef<THREE.Mesh>(null);
   const earthGroup = useRef<THREE.Group>(null);
   const sunLight = useRef<THREE.DirectionalLight>(null);
   const starsMat = useRef<THREE.PointsMaterial>(null);
+
+  /* rotation that brings the marker to face the camera — REPLACES the
+   *  story rotation while focusing (the landing, with no marker, is unchanged) */
+  const focusRotation = useMemo(() => {
+    if (!marker || !focus) return null;
+    const v = latLonToVec3(marker.lon, marker.lat, 1);
+    return Math.atan2(-v.x, v.z);
+  }, [marker, focus]);
 
   const tmp = useMemo(
     () => ({
@@ -260,7 +357,7 @@ function Director({
     }
 
     if (earthGroup.current) {
-      earthGroup.current.rotation.y = track1(EARTH_ROTY, p);
+      earthGroup.current.rotation.y = focusRotation ?? track1(EARTH_ROTY, p);
       if (cloudsMesh.current) {
         // clouds drift only relative to scroll — never on their own
         cloudsMesh.current.rotation.y =
@@ -314,6 +411,7 @@ function Director({
         groupRef={earthGroup}
         lightRef={sunLight}
         lowPower={lowPower}
+        marker={marker}
       />
     </>
   );
@@ -400,9 +498,15 @@ function useStageAssets(lowPower: boolean): {
 export default function Stage({
   onReady,
   paused = false,
+  marker = null,
+  focus = false,
 }: {
   onReady?: () => void;
   paused?: boolean;
+  /** optional epicentre pin for the Earthquake page (presentation only) */
+  marker?: StageMarker | null;
+  /** rotate so the marker faces the camera (Earthquake page framing) */
+  focus?: boolean;
 }) {
   const lowPower = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -462,6 +566,8 @@ export default function Stage({
           earthTextures={earth}
           onFirstFrame={handleFirstFrame}
           lowPower={lowPower}
+          marker={marker}
+          focus={focus}
         />
       ) : null}
     </Canvas>

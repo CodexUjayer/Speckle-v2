@@ -11,20 +11,17 @@ import { TL } from "./scroll";
 export const REPO_URL = "https://github.com/Tech-Doomsday/Dancing_With_SARs";
 
 /**
- * Entry point of the real application: the Map (the globe app, `/map`).
- * Every "go and play" call to action on the landing leads here. Set
- * NEXT_PUBLIC_SPECKLE_APP_URL only to point the landing at a deployment
- * hosted elsewhere.
+ * Entry point of the real application (the hazard console built with the
+ * engine). When this landing page is merged into the repository, set
+ * NEXT_PUBLIC_SPECKLE_APP_URL to the deployed app-ui entry (e.g. "/console").
+ * Until then the repository itself is the honest destination.
+ *
+ * Single-route adaptation (this deployment): the app entry lives at the
+ * in-page Earthquake investigation view — `#quake` on the same route. The
+ * hash is handled by the router in src/app/page.tsx.
  */
 export const APP_URL =
-  process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || "/map";
-
-/** Props for an <a>: a link inside this app opens in the same tab, an outside one in a new tab. */
-export function linkProps(href: string) {
-  return /^https?:\/\//.test(href)
-    ? ({ target: "_blank", rel: "noreferrer noopener" } as const)
-    : ({} as const);
-}
+  process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || "#quake";
 
 export const LINKS = {
   app: APP_URL,
@@ -36,6 +33,11 @@ export const LINKS = {
   spaceapps: "https://www.spaceappschallenge.org/",
   nasaVisibleEarth: "https://visibleearth.nasa.gov/",
 } as const;
+
+/** Anchor props for a link target — in-app hash links must not open new tabs. */
+export function linkProps(href: string): { target?: string; rel?: string } {
+  return href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer noopener" };
+}
 
 /* ------------------------------------------------------------------ */
 /* Chapter themes — each chapter grades the whole page                 */
@@ -85,7 +87,6 @@ export const HERO = {
   title: "Speckle",
   subtitle: "Earth is always changing.",
   body: "Discover the changes shaping our planet, observed from space.",
-  cue: "Scroll to begin",
 } as const;
 
 export const CHAPTER_2 = {
