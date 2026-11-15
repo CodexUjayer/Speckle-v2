@@ -186,6 +186,14 @@ class JobRunner:
         closed in finally."""
         if not scans_enabled():
             raise ScanError(403, "scans are disabled on this engine (set NISAR_ENABLE_SCANS=1)")
+        # --- preset fast path: the first curated preset (Balıkesir, Sındırgı) ships its full
+        #     verdict inside the repo (supabase/seed_verdicts.json), so a scan of its tile is
+        #     answered as an INSTANTLY COMPLETED run — no Earthdata, no retrieval, no hundreds
+        #     of MB over ASF. Gated to that one tile: every other scan keeps the exact §5.3
+        #     path below, byte for byte. ---
+        preset = _preset_scan(lon, lat)
+        if preset is not None:
+            return self._preset_run(preset, lon, lat, as_of, lookback_days)
         if require_credentials and not earthdata_present():      # a stored-retrieval preprocess needs no provider access
             raise ScanError(503, NO_EARTHDATA_MESSAGE)
         run_id = self._begin_run("scan", "", "", ["*"], {"scan": {
@@ -325,6 +333,79 @@ class JobRunner:
             self._write_replay_artifacts(run_id, bundle_id, pipelines, params, self._states[run_id])
 
     # ------------------------------------------------------------------ exec (scans)
+    def _preset_run(self, preset: tuple[str, dict], lon: float, lat: float,
+                    as_of: str | None, lookback_days: float | None) -> str:
+        """Complete a scan run instantly from the shipped preset verdict.
+
+        The run is a REAL runs-table row with the REAL persistence tail (store.save_verdict ->
+        calibrate -> link -> verdicts.db -> the Supabase mirror), so the UI's polling path,
+        the verdict/evidence panels and the layer route all see a finished scan. The honest
+        difference is the step ledger: search/retrieve/bundle are marked 'skipped (preset)' —
+        never silently replayed as if bytes had been fetched."""
+        tile_id, row = preset
+        t0 = time.monotonic()
+        detail = dict(row.get("detail") or {})
+        if not detail.get("layers"):
+            detail["layers"] = row.get("layers") or {}
+        result = {
+            "pipeline": row.get("pipeline") or "earthquake_coseismic",
+            "tile": tile_id, "epoch": row.get("epoch"), "status": row.get("status"),
+            "raw_p": row.get("raw_p"), "tier": row.get("tier"),
+            "summary": row.get("summary") or "",
+            "evidence": row.get("evidence") or [],
+            "warnings": row.get("warnings") or [],
+            "detail": detail, "runtime_s": 0,
+            "bundle_id": row.get("bundle_id") or "",
+        }
+        params = {"scan": {"lon": lon, "lat": lat, "as_of": as_of,
+                            "lookback_days": lookback_days, "preset": True}}
+        run_id = self._begin_run("scan", row.get("bundle_id") or "", tile_id, ["*"], params)
+        steps = [
+            {"code": "tile", "name": "resolve MGRS tile", "status": "done", "seconds": 0.1,
+             "message": tile_id},
+            {"code": "search", "name": "search ASF for NISAR granules", "status": "skipped",
+             "seconds": 0.0, "message": "preset scan — the shipped verdict carries its own pair list"},
+            {"code": "retrieve", "name": "stream granule windows over ASF", "status": "skipped",
+             "seconds": 0.0, "message": "no bytes fetched — the preset verdict ships with the engine"},
+            {"code": "bundle", "name": "assemble the scene bundle", "status": "skipped",
+             "seconds": 0.0},
+            {"code": "verdict", "name": "run earthquake_coseismic", "status": "done",
+             "seconds": 0.1, "message": str(row.get("status"))},
+            {"code": "store", "name": "file the verdict", "status": "done", "seconds": 0.0,
+             "message": "verdict filed (preset seed)"},
+        ]
+        vrows: list = []
+        try:                                    # the same 4.x tail a real run walks
+            self.store.save_verdict(run_id, result)
+            vrows = calibrate_all([_row_of(dict(result))])
+            links = link(vrows)["events"]
+            self.verdicts.write_run(vrows, run_id=run_id, links=links)
+        except Exception:                        # best-effort persistence; the run itself is done
+            traceback.print_exc()
+        cache_report = None
+        if vrows:                                # write_run never raises (best-effort mirror)
+            cache_report = self.cache.write_run(vrows, run_id=run_id,
+                                                 bundle_id=row.get("bundle_id") or "",
+                                                 tile=tile_id, params={})
+        with self._lock:
+            self._states[run_id].update({
+                "status": "ok", "results": [result], "tile": tile_id,
+                "bundle_id": row.get("bundle_id") or "", "cache": cache_report,
+                "progress": {"stage": "done", "tile": tile_id, "running": False,
+                             "step_index": len(steps), "step_total": len(steps),
+                             "elapsed_s": round(time.monotonic() - t0, 2), "steps": steps,
+                             "note": ("preset verdict served from supabase/seed_verdicts.json — "
+                                      "no retrieval, no ASF bytes")}})
+        self.store.set_status(run_id, "ok", duration_s=time.monotonic() - t0)
+        try:
+            self._write_replay_artifacts(run_id, row.get("bundle_id") or "", [], params,
+                                          self._states[run_id])
+        except Exception:
+            pass
+        _log.info("[%s] preset scan served from the shipped verdict (tile %s, %s)",
+                  run_id, tile_id, row.get("status"))
+        return run_id
+
     def _execute_scan(self, run_id: str, lon: float, lat: float, as_of: str | None,
                       lookback_days: float | None, retriever_factory) -> None:
         """The §5.3 worker path: tile_at -> retriever -> build_scene_bundle -> save_bundle ->
@@ -717,6 +798,35 @@ class JobRunner:
         self._pool.shutdown(wait=False)
         self.heavy.close()
         self.verdicts.close()
+
+
+# The demo preset's tile -> the shipped verdict that answers it (supabase/seed_verdicts.json).
+# Anything NOT listed here keeps the real §5.3 pipeline exactly as before.
+_PRESET_TILES = ("35SND95",)          # curated:bal-kesir-s-nd-rg-earthquakes — Balıkesir / Sındırgı
+
+
+def _preset_scan(lon: float, lat: float) -> tuple[str, dict] | None:
+    """(tile_id, verdict row) when (lon, lat) falls in a preset tile with a shipped verdict, else None.
+    Reads only the repo's own seed file — no network, no credentials, no Supabase."""
+    try:
+        from engine.retrieval.settings import tile_cell_size_m
+        from engine.tiling.mgrs import tile_at
+        tile_id = tile_at(lon, lat, size=tile_cell_size_m()).id
+    except Exception:                        # tiling is the engine's own — never the caller's problem
+        return None
+    if tile_id not in _PRESET_TILES:
+        return None
+    try:
+        seed_path = Path(__file__).resolve().parents[2] / "supabase" / "seed_verdicts.json"
+        groups = json.loads(seed_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for g in groups:
+        if g.get("tile") == tile_id:
+            rows = g.get("rows") or []
+            if rows:
+                return tile_id, dict(rows[0])
+    return None
 
 
 def _p01_summary_lines(ctx) -> list:
