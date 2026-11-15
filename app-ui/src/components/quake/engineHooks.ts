@@ -6,6 +6,7 @@
 
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import { api, EngineError, engineUrl, engineApi, isUnreachable } from "@/lib/engine/client";
+import { BUNDLE_INFO, type BundleInfo } from "@/lib/engine/bundleInfo";
 import type { GranuleSearchResponse, Health, PipelineResult, RunState, StoredVerdict } from "@/lib/engine/types";
 
 const q = (k: string) => [k] as const;
@@ -163,6 +164,20 @@ export function useBundles() {
   });
 }
 
+type BundleDetail = {
+  ok: true;
+  bundle: {
+    bundle_id: string;
+    tile: Record<string, unknown>;
+    epoch: string | null;
+    status: string | null;
+    depth: { n_gunw_pairs: number | null; n_gunw_dates: number | null; n_gcov_epochs: number | null; cold_start: boolean | null } | null;
+    routing_decisions: unknown;
+    applicable: unknown;
+    flags: string[];
+  } | BundleInfo;
+};
+
 export function useBundle(bundleId: string | null) {
   return useQuery({
     queryKey: ["bundle", bundleId],
@@ -170,22 +185,19 @@ export function useBundle(bundleId: string | null) {
       fetch(engineUrl(`/api/bundles/${encodeURIComponent(bundleId as string)}`), {
         cache: "no-store",
         signal,
-      }).then(async (r) => {
-        if (!r.ok) throw new Error(`bundle detail answered ${r.status}`);
-        return (await r.json()) as {
-          ok: true;
-          bundle: {
-            bundle_id: string;
-            tile: Record<string, unknown>;
-            epoch: string | null;
-            status: string | null;
-            depth: { n_gunw_pairs: number | null; n_gunw_dates: number | null; n_gcov_epochs: number | null; cold_start: boolean | null } | null;
-            routing_decisions: unknown;
-            applicable: unknown;
-            flags: string[];
-          };
-        };
-      }),
+      })
+        .then(async (r): Promise<BundleDetail> => {
+          if (!r.ok) throw new Error(`bundle detail answered ${r.status}`);
+          return (await r.json()) as BundleDetail;
+        })
+        .catch((e: unknown): BundleDetail => {
+          // The engine keeps per-bundle depth under its (gitignored) data dir — a
+          // host that never stored this bundle answers 404. Fall back to the same
+          // presence-only metadata the shipped registry carries for it.
+          const shipped = BUNDLE_INFO[bundleId as string];
+          if (shipped) return { ok: true, bundle: shipped };
+          throw e;
+        }),
     enabled: bundleId !== null,
     staleTime: 60_000,
     retry: 1,
