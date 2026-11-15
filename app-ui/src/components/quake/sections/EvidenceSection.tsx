@@ -18,7 +18,17 @@ export default function EvidenceSection({ target, runId }: { target: Target | nu
   const res = verdict.result;
   const bundle = useBundle(res?.bundle_id ?? verdict.stored?.bundle_id ?? null);
 
-  const provenance = ((res as unknown as { provenance?: Source[] })?.provenance ?? []) as Source[];
+  /* The engine's stored verdicts carry their evidence trail inside detail._result_meta
+   * (the reserved key the store packs provenance/data_used/references_used into); a run
+   * result may instead surface them top-level. Read both — verbatim, never recomputed. */
+  const meta = (
+    res?.detail as Partial<{ _result_meta?: { provenance?: Source[]; data_used?: string[]; references_used?: string[] } }> | undefined
+  )?._result_meta;
+  const provenance = (
+    ((res as unknown as { provenance?: Source[] })?.provenance ?? meta?.provenance) ?? []
+  ) as Source[];
+  const dataUsed = res?.data_used ?? meta?.data_used ?? [];
+  const referencesUsed = res?.references_used ?? meta?.references_used ?? [];
   const inputs = res?.detail?.inputs;
   const selectedPair = inputs?.selected_pair;
   const granuleIds = selectedPair?.granule_ids ?? [];
@@ -103,7 +113,7 @@ export default function EvidenceSection({ target, runId }: { target: Target | nu
                 </p>
               </div>
             ) : null}
-            {res.data_used?.length ? (
+            {dataUsed.length ? (
               <div className="border-t border-[var(--qp-edge)] px-5 py-4">
                 <div className="flex items-center gap-2">
                   <Database className="h-3.5 w-3.5 text-[var(--qp-red)]" aria-hidden />
@@ -112,7 +122,7 @@ export default function EvidenceSection({ target, runId }: { target: Target | nu
                   </p>
                 </div>
                 <ul className="mt-2.5 space-y-1.5">
-                  {res.data_used.map((d, i) => (
+                  {dataUsed.map((d, i) => (
                     <li key={i} className="text-[12px] leading-relaxed text-[var(--qp-ink-2)]">
                       · {d}
                     </li>
@@ -201,9 +211,9 @@ export default function EvidenceSection({ target, runId }: { target: Target | nu
 
             <Panel className="overflow-hidden">
               <PanelHead title="Science the pipeline cites" right={<BookOpen className="h-3.5 w-3.5 text-[var(--qp-ink-3)]" aria-hidden />} />
-              {res.references_used?.length ? (
+              {referencesUsed.length ? (
                 <ul className="divide-y divide-[var(--qp-edge)]">
-                  {res.references_used.map((r, i) => (
+                  {referencesUsed.map((r, i) => (
                     <li key={i} className="px-5 py-3 text-[12px] leading-relaxed text-[var(--qp-ink-2)]">
                       · {r}
                     </li>
