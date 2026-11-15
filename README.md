@@ -304,17 +304,18 @@ python -m pytest -q                                   # the maintained suite (te
 EQ_LIVE=1 python -m pytest -m live -q                 # opt-in live-network tests
 ```
 
-## 7. The Earthquake observatory — the landing's `#quake` view
+## 7. The Earthquake observatory — its own page at `/earthquakes`
 
-The cinematic landing now carries an in-page child view: the **Earthquake observatory**, a
+The **Earthquake observatory** is a separate page of the app (`/earthquakes`), a
 guided investigation room over the same engine API the console and map use. Nothing about the
 engine, the console, the map or the background pages changed — this is a purely additive
 front-end feature that talks to the same FastAPI surface (§5.2 tile-at, §5.5 granules, §5.3
 scans/runs, canonical verdicts).
 
-**Open it**: scroll the landing and use the **Explore earthquakes** entry points (nav CTA, the
-earthquake sector card, the finale), or go straight to `http://localhost:3000/#quake`. The URL
-hash is shareable and back-button safe; the film keeps your scroll position when you return.
+**Open it**: scroll the landing and use the **Explore earthquakes** button on the earthquake
+sector card, or go straight to `http://localhost:3000/earthquakes`. It does not replace anything
+on the landing: the nav **Go and play** button and the finale **Start exploring** button both lead
+to the Map (`/map`).
 
 **The eight chapters** — Event (live USGS ComCat catalogue via the engine + the repo's curated
 disaster list), Coverage (the tile's NISAR GUNW/GCOV inventory), Scan (the real run workflow,
@@ -331,7 +332,8 @@ Archive (the engine's stored verdicts per tile — the same `verdicts.db` the co
 | `app-ui/src/lib/engine/` | its typed engine client — transport only, zero science (the repo's `src/lib` rule) |
 | `app-ui/src/components/quake/engineHooks.ts` | the TanStack Query hooks over that client |
 | `app-ui/src/components/quake/data.ts` + `utils.ts` | the engine-parameter labels module + the `cn()` helper |
-| `app-ui/src/app/(landing)/page.tsx` | the film ↔ `#quake` view switcher |
+| `app-ui/src/app/(landing)/page.tsx` | the cinematic landing film (nothing else) |
+| `app-ui/src/app/(landing)/earthquakes/page.tsx` | the `/earthquakes` route that mounts the observatory |
 | `app-ui/src/app/providers.tsx` | the client-side query provider for the view |
 | `app-ui/src/app/api/engine-keepalive/route.ts` | dev-only convenience: GET it to verify/start the engine |
 

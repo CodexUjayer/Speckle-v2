@@ -50,6 +50,16 @@ earthquake:                     # earthquake_coseismic (per-request override: tr
   merge_decompose: true         # event mode only: solve east + up motion where BOTH geometries saw the pixel (north-south assumed zero)
   merge_min_geometry_det: 0.3   # skip the east/up solve where the two look vectors are too alike (|determinant| below this)
 
+deforestation:                  # deforestation 3.08 (per-request override: triggers.deforestation_params). Literature behind each value:
+                                # engine/pipelines/deforestation/README.md
+  min_epochs: 6                 # NISAR calibrated L-band starts 2026-06-17: a 120-day window holds ~10 epochs, never a seasonal cycle
+  min_drop_db: 1.5              # L-band HV drop of cleared forest, 1.5-3.2 dB (Watanabe 2018; JJ-FAST)
+  min_rise_db: 1.0              # early-stage HH rise ~ +1.2 dB with felled trees left on the ground
+  persist_epochs: 2             # consecutive epochs at the new level
+  min_patch_ha: 0.5
+  slope_max_deg: 15.0           # JJ-FAST steep-terrain mask
+  rain_flag_mm: 10.0            # IMERG 48 h total that flags an epoch (rain raises L-band HV by >2 dB in dense forest)
+
 registry:
   fetch_for_unmodelled: false   # false: products are fetched / steps run only for pipelines that really have a run()
   task_timeout_s: 900

@@ -84,5 +84,76 @@ def azimuth_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return math.degrees(math.atan2(y, x))
 
 
+# --------------------------------------------------------------------------- #
+# WGS84 <-> UTM without pyproj (Krueger n-series, Karney 2011; sub-millimetre inside a zone).
+# pipelines may import engine.lib but not the chain, so the pipeline-side projection lives here. The chain's own copy
+# (engine/common/_geo.py) is pinned against this one by tests/test_lib_geo_utm.py.
+# --------------------------------------------------------------------------- #
+_F = 1.0 / 298.257223563
+_N = _F / (2.0 - _F)
+_K0 = 0.9996
+_AA = 6378137.0 / (1 + _N) * (1 + _N ** 2 / 4 + _N ** 4 / 64 + _N ** 6 / 256)
+_ALPHA = (_N / 2 - 2 * _N ** 2 / 3 + 5 * _N ** 3 / 16 + 41 * _N ** 4 / 180,
+          13 * _N ** 2 / 48 - 3 * _N ** 3 / 5 + 557 * _N ** 4 / 1440,
+          61 * _N ** 3 / 240 - 103 * _N ** 4 / 140,
+          49561 * _N ** 4 / 161280)
+_BETA = (_N / 2 - 2 * _N ** 2 / 3 + 37 * _N ** 3 / 96 - _N ** 4 / 360,
+         _N ** 2 / 48 + _N ** 3 / 15 - 437 * _N ** 4 / 1440,
+         17 * _N ** 3 / 480 - 37 * _N ** 4 / 840,
+         4397 * _N ** 4 / 161280)
+_DELTA = (2 * _N - 2 * _N ** 2 / 3 - 2 * _N ** 3 + 116 * _N ** 4 / 45,
+          7 * _N ** 2 / 3 - 8 * _N ** 3 / 5 - 227 * _N ** 4 / 45,
+          56 * _N ** 3 / 15 - 136 * _N ** 4 / 35,
+          4279 * _N ** 4 / 630)
+
+
+def _utm_zone_north(epsg: int) -> tuple[int, bool]:
+    e = int(epsg)
+    if 32601 <= e <= 32660:
+        return e - 32600, True
+    if 32701 <= e <= 32760:
+        return e - 32700, False
+    raise ValueError(f"EPSG:{epsg} is not WGS84 UTM")
+
+
+def utm_to_lonlat(x, y, epsg: int):
+    """Projected metres (WGS84 UTM, EPSG 326xx/327xx) -> (lon, lat) degrees. Vectorised; raises ValueError for other CRSs."""
+    zone, north = _utm_zone_north(epsg)
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    eta_p = (x - 500000.0) / (_K0 * _AA)
+    xi_p = (y - (0.0 if north else 10000000.0)) / (_K0 * _AA)
+    xi, eta = xi_p.copy(), eta_p.copy()
+    for j, b in enumerate(_BETA, start=1):
+        xi = xi - b * np.sin(2 * j * xi_p) * np.cosh(2 * j * eta_p)
+        eta = eta - b * np.cos(2 * j * xi_p) * np.sinh(2 * j * eta_p)
+    chi = np.arcsin(np.sin(xi) / np.cosh(eta))
+    phi = chi.copy()
+    for j, d in enumerate(_DELTA, start=1):
+        phi = phi + d * np.sin(2 * j * chi)
+    lam = np.arctan2(np.sinh(eta), np.cos(xi))
+    return np.degrees(lam) + ((zone - 1) * 6 - 180 + 3), np.degrees(phi)
+
+
+def lonlat_to_utm(lon, lat, epsg: int):
+    """(lon, lat) degrees -> projected metres in the WGS84 UTM zone of `epsg` (the tile fixes the zone)."""
+    zone, north = _utm_zone_north(epsg)
+    lon = np.asarray(lon, dtype=np.float64)
+    lat = np.asarray(lat, dtype=np.float64)
+    lon0 = math.radians((zone - 1) * 6 - 180 + 3)
+    phi = np.radians(lat)
+    lam = (np.radians(lon) - lon0 + np.pi) % (2 * np.pi) - np.pi
+    e = 2 * math.sqrt(_N) / (1 + _N)
+    sp = np.sin(phi)
+    t = np.sinh(np.arctanh(sp) - e * np.arctanh(e * sp))
+    xi_p = np.arctan2(t, np.cos(lam))
+    eta_p = np.arctanh(np.sin(lam) / np.sqrt(1 + t * t))
+    xi, eta = xi_p.copy(), eta_p.copy()
+    for j, a in enumerate(_ALPHA, start=1):
+        xi = xi + a * np.sin(2 * j * xi_p) * np.cosh(2 * j * eta_p)
+        eta = eta + a * np.cos(2 * j * xi_p) * np.sinh(2 * j * eta_p)
+    return 500000.0 + _K0 * _AA * eta, _K0 * _AA * xi + (0.0 if north else 10000000.0)
+
+
 __all__ = ["epsg_is_utm", "haversine_km", "project_epicentre", "en_offsets_m", "azimuth_deg",
-           "EARTH_RADIUS_KM"]
+           "EARTH_RADIUS_KM", "utm_to_lonlat", "lonlat_to_utm"]

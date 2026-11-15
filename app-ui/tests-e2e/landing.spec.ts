@@ -60,3 +60,21 @@ test("the cinematic landing owns / and its \"Go and play\" button leads to the m
   await expect(cta).toHaveAttribute("href", "/map");
   await expect(cta).not.toHaveAttribute("target", "_blank");
 });
+
+test("nav \"Go and play\" and the finale CTA lead to the Map, not to the earthquake page", async ({ page }) => {
+  await page.goto("/");
+  const play = page.getByRole("link", { name: /go and play/i });
+  await expect(play).toBeAttached({ timeout: 20_000 });
+  await expect(play).toHaveAttribute("href", "/map");
+  // the earthquake page is a separate route, never wired into the nav
+  await expect(page.getByRole("link", { name: /^earthquakes$/i })).toHaveCount(0);
+  await expect(page.locator('a[href="#quake"]')).toHaveCount(0);
+});
+
+test("the earthquake observatory is its own page at /earthquakes and the landing stays the film", async ({ page }) => {
+  // "/#quake" no longer swaps the landing for the observatory
+  await page.goto("/#quake");
+  await expect(page.locator(".quake-paper")).toHaveCount(0);
+  await page.goto("/earthquakes");
+  await expect(page.locator(".quake-paper").first()).toBeAttached({ timeout: 30_000 });
+});

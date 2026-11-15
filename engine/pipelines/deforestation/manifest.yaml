@@ -1,21 +1,20 @@
 # manifest.yaml — 3.08 deforestation
-# auto-scaffolded from the Speckle spec export — fill in / adjust as the pipeline is implemented
 
 code: "3.08"
 name: "deforestation"
 sensor: "NISAR"
-model_type: "statistics (sequential change)"
+model_type: "statistics (sequential change: Page CUSUM + persistence + patch filter + exploratory null screen)"
 
 applies: "forest land cover or S4 tree cover >= 30%"
 
-uses: "M2 HV and HH (G20), baseline stats, optional M1 coherence"
+uses: "M2 gamma0 HV and HH (G20; HV-HH ratio), bundle baseline (contamination check), numberOfLooks, valid / layover / shadow / incidence masks, z_prev, db_diff_prev, geometry, stable-mask components, ancillary (land cover, tree cover, slope, HAND, water occurrence, built-up); optional M1 coherence / coherence baseline / LOS / sigma / conn_comp and M3 offsets peak as supporting cues"
 uses_codes: 
   - "M2"
   - "M1"
 
-own_prep: "forest mask, exclude water / layover / steep slopes, flag epochs within 48 h of rain, prefer cross-pol HV for moisture robustness"
+own_prep: "forest mask (land cover tree/mangrove OR S4 tree cover >= 30%); exclude water, layover/shadow/incidence, slope > 15 deg, built-up; HAND-low = flood-prone (kept, needs HV confirmation); EARLY-window reference (the bundle baseline spans every epoch before the newest and is contaminated by mid-window clearings - it is measured, not used as the reference); iterated tile-wide common-mode (rain / moisture) correction on stable forest; epochs flagged for a tile-wide offset or IMERG rain >= 10 mm / 48 h are neutral for persistence; mask-aware 3x3 multilook, pooled noise sigma, prediction-interval z; pixels non-forest at the start / with too few valid epochs / changed inside the reference window excluded and counted; cross-pol HV is the late-stage channel"
 
-own_fetch: "R7 GFW alerts, S4 loss year, R6 FIRMS (separate fire loss from clearing), R4, R10 (windthrow)"
+own_fetch: "R7 GFW integrated alerts (independent agreement, unmatched alerts); S4 UMD loss year for the largest patches (prior-clearing caveat); R6 FIRMS VIIRS (fire loss); R4 IMERG daily rain (48 h before each pass); R10 IBTrACS (windthrow). All five are corroboration / attribution: a failed source is reported as unavailable, never as 'none found'. Adapters verified against published API contracts; live network paths were not exercised where they were written."
 fetch_codes: 
   - "R7"
   - "S4"
@@ -24,11 +23,20 @@ fetch_codes:
   - "R10"
 
 method:
-  - "per-pixel CUSUM on HV dB against robust baseline; persistence rule (>= 2-3 consecutive epochs below baseline by >= k dB); patch filter >= 0.5 ha; cause attribution: fire (FIRMS in patch) | clearing (geometric patch, roads) | windthrow (post-storm cluster)"
+  - "per-pixel Page CUSUM (k=0.5, h=4 sigma) from the first tested epoch; persistence >= 2 usable epochs at the new level (flagged-wet epochs are neutral); post-onset level >= 1 dB"
+  - "TWO L-band stages (Watanabe 2018; JJ-FAST): late = HV drop (>= 1.5 dB at patch level); early = HV-HH ratio drop with HH rising and HV neither falling nor rising (felled trees on the ground, about +1.2 dB HH). Rain raises HV more than HH, so it cannot satisfy the early rule"
+  - "patch = 8-connected confirmed pixels >= 0.5 ha after raw-resolution edge refinement; patch-mean HV/HH/ratio timeline fixes the onset (early_then_late) and the loss window (the last usable pass before the change)"
+  - "cause attribution: fire (VIIRS detection within 375 m around the loss date) | windthrow (storm >= 34 kt within 300 km before the loss and an irregular patch) | clearing (straight-edged / road-like patch or abrupt step) | unattributed"
+  - "hotspots: confirmed loss hectares on a 500 m grid, strongest first; patches ranked by area"
+  - "status: INSUFFICIENT_EVIDENCE for no data / no analysable stack / too little forest / too few valid / too wet / noise above signal / indistinguishable from the null screen / only unconfirmed candidates; NOT_SUPPORTED only with enough clean evidence and nothing confirmed; SUPPORTED with a confirmed patch that beats 3 x the null maximum"
 
-output: "P(forest loss), area ha, cause label, persistence count, agreement with R7"
+output: "status; raw_p = uncalibrated within-tier RANK SCORE in [0,1] - NOT a probability; area ha, patches (onset, stage, cause + basis, persistence, R7 agreement), ranked hotspots, layers (loss_class, days_before_newest, hv_change_db, hh_change_db, loss_density_ha, cause, exclusion, r7_alerts), detections for the map, and a per-field SceneBundle usage ledger"
 
-min_epochs: null
+execution: normal
+timeout_s: 600
+needs_sar: true
+
+min_epochs: 6               # ref_epochs_min (4) + persist_epochs (2); gated on the gcov_epochs metric (config registry.min_epochs_metric)
 
 status_values:
   - "SUPPORTED"

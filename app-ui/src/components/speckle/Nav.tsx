@@ -2,13 +2,13 @@
 
 /**
  * Minimal navigation — the quietest possible header. The wordmark on the
- * left, the console entry point on the right. Nothing else: the story
+ * left, the GitHub link and the "Go and play" button (into the Map) on the right. Nothing else: the story
  * speaks for itself, the chapter compass lives on the right edge of the
  * stage, and this bar never competes with either.
  */
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Github } from "lucide-react";
+import { Github, Play } from "lucide-react";
 import { LINKS, linkProps } from "./data";
 
 function jumpToTop() {
@@ -58,15 +58,13 @@ export default function Nav() {
             <Github className="h-[15px] w-[15px]" aria-hidden />
           </a>
           <a
-            href={LINKS.app}
-            {...linkProps(LINKS.app)}
-            className="group inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-white/80 transition-colors hover:text-white"
+            href={LINKS.map}
+            {...linkProps(LINKS.map)}
+            className="play-btn group relative inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#04070d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
           >
-            Earthquakes
-            <ArrowUpRight
-              className="h-3 w-3 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-              aria-hidden
-            />
+            <span className="play-halo" aria-hidden />
+            <Play className="play-icon h-3 w-3 fill-current" aria-hidden />
+            Go and play
           </a>
         </div>
       </nav>

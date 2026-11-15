@@ -11,21 +11,20 @@ import { TL } from "./scroll";
 export const REPO_URL = "https://github.com/Tech-Doomsday/Dancing_With_SARs";
 
 /**
- * Entry point of the real application (the hazard console built with the
- * engine). When this landing page is merged into the repository, set
- * NEXT_PUBLIC_SPECKLE_APP_URL to the deployed app-ui entry (e.g. "/console").
- * Until then the repository itself is the honest destination.
+ * Entry point of the real application: the Map (/map), which is wired to the
+ * engine and every hazard pipeline. The nav "Go and play" button and the
+ * finale CTA both use it. Set NEXT_PUBLIC_SPECKLE_APP_URL to point the
+ * landing at a different deployment of the app.
  *
- * Single-route adaptation (this deployment): the app entry lives at the
- * in-page Earthquake investigation view — `#quake` on the same route. The
- * hash is handled by the router in src/app/page.tsx.
+ * The Earthquake investigation room is a separate page (/earthquakes) and is
+ * only linked from its own sector card; it never replaces the Map entry.
  */
-export const APP_URL =
-  process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || "#quake";
+export const APP_URL = process.env.NEXT_PUBLIC_SPECKLE_APP_URL?.trim() || "/map";
 
 export const LINKS = {
   app: APP_URL,
-  earthquakes: APP_URL,
+  map: "/map",
+  earthquakes: "/earthquakes",
   hurricanes: `${REPO_URL}/tree/main/engine/pipelines/flood_inundation`,
   erosion: `${REPO_URL}/tree/main/engine/pipelines/river_erosion`,
   architecture: `${REPO_URL}/blob/main/docs/ARCHITECTURE.md`,
@@ -34,9 +33,11 @@ export const LINKS = {
   nasaVisibleEarth: "https://visibleearth.nasa.gov/",
 } as const;
 
-/** Anchor props for a link target — in-app hash links must not open new tabs. */
+/** Anchor props for a link target: in-app links (hash or same-site path) stay in the tab,
+ *  external links open a new one. */
 export function linkProps(href: string): { target?: string; rel?: string } {
-  return href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer noopener" };
+  const internal = href.startsWith("#") || (href.startsWith("/") && !href.startsWith("//"));
+  return internal ? {} : { target: "_blank", rel: "noreferrer noopener" };
 }
 
 /* ------------------------------------------------------------------ */

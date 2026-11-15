@@ -93,7 +93,7 @@ git push origin main
    and the engine panel stays "unreachable". `NEXT_PUBLIC_*` values are baked in at
    build time — if you change it later you must **Redeploy**.
 5. **Deploy** (~2–3 min). Open the URL: the cinematic landing should play, and the
-   nav **Earthquakes** entry should open the `#quake` investigation view.
+   nav **Go and play** button should open the Map (`/map`); the earthquake sector card opens `/earthquakes`.
 6. Copy the production URL (e.g. `https://speckle.vercel.app`) — you need it in Part C.
 
 ## Part C — tie them together (CORS)
@@ -109,7 +109,7 @@ git push origin main
 
 1. `https://speckle-engine.onrender.com/api/health` → `"ok": true`
 2. `https://speckle.vercel.app` → landing plays
-3. Click **Earthquakes** → `#quake` view loads, engine status green
+3. Click **Go and play** → the Map loads. Then open `/earthquakes` → the observatory loads, engine status green
 4. Pick an event → **Run scan** → pipelines progress → verdict renders
 5. Reload → stored verdicts list under `/api/tiles` (until the Render container restarts — see below)
 

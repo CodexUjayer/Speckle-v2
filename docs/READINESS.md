@@ -17,6 +17,11 @@ plus reading the code. Re-run the hub to refresh; this file is a snapshot, the h
 > (`engine/retrieval/clients/adapters/` are stubs). The scan no longer downloads GCOV or runs P08/P11 for these 15 pipelines
 > (`registry.fetch_for_unmodelled: false` in `config/common.yaml`).
 
+> **Addendum 2026-11-15 - `deforestation` now defines `run()`** (`engine/pipelines/deforestation/README.md`). Counts above predate it.
+> Verified on synthetic scenes with known truth through the real P01..P13 chain (`tests/deforestation_scene.py`), **not** real NISAR data.
+> Its five reference adapters (R4, R6, R7, R10, S4) were written from published API contracts; live network paths were not exercised.
+> Before trusting it on a real tile, run it on one known clearing with `GFW_API_KEY` and `FIRMS_MAP_KEY` set and read the `sources` block of the result.
+
 **Verdict: the measurement path (retrieval -> P01..P13 -> SceneBundle) is built and contract-clean; the pipelines are not
 yet implementable end to end, because of five gaps that sit upstream of the pipelines, not inside them.**
 

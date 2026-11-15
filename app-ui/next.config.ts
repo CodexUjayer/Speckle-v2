@@ -31,12 +31,11 @@ const nextConfig: NextConfig = {
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://onirsspdleznadqosekz.supabase.co",
     NEXT_PUBLIC_SUPABASE_ANON_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_iLiy5s0CHF7CwNatk1kI0w_StMOcwGy",
-  /* Speckle landing wiring: where the landing page's "Earthquakes" nav
-     entry, the "Explore earthquakes" sector card and the finale CTA
-     lead (LINKS.app in src/components/speckle/data.ts). Defaults to
-     the in-page Earthquake observatory (#quake); override with a
-     deployed URL when hosting elsewhere. */
-    NEXT_PUBLIC_SPECKLE_APP_URL: process.env.NEXT_PUBLIC_SPECKLE_APP_URL ?? "#quake",
+    /* Speckle landing wiring: where the landing's "Go and play" entry and the
+       finale CTA lead (LINKS.app in src/components/speckle/data.ts). Defaults to
+       the Map (/map); override with a deployed URL when hosting elsewhere. The
+       Earthquake room is its own page at /earthquakes. */
+    NEXT_PUBLIC_SPECKLE_APP_URL: process.env.NEXT_PUBLIC_SPECKLE_APP_URL ?? "/map",
   },
   async redirects() {
     return [

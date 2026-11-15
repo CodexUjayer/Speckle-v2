@@ -171,6 +171,74 @@ class EarthquakeCfg:
 
 
 @dataclass(frozen=True)
+class DeforestationCfg:
+    """deforestation parameters (3.08). They steer the PIPELINE, not the bundle, so they are not part of the bundle hash
+    (see CommonConfig.chain_params). A caller can override per request via triggers["deforestation_params"].
+    Defaults are tied to the literature the pipeline implements (docs in engine/pipelines/deforestation/README.md)."""
+    # series / reference
+    pol: str = "HV"                    # cross-pol: volume scattering, the moisture-robust channel (late-stage loss)
+    co_pol: str = "HH"                 # co-pol: fresh clearing with felled trees on the ground RAISES HH (L-band, Watanabe 2018)
+    min_epochs: int = 6                # usable epochs per stack: ref_epochs_min + persist_epochs
+    ref_epochs_min: int = 4            # early window that defines "forest as it was"
+    ref_fraction: float = 0.4          # reference window = this share of the epochs, but at least ref_epochs_min
+    min_ref_valid: int = 3             # valid reference epochs a pixel needs
+    min_sigma_db: float = 0.5          # floor of the per-pixel reference sigma (on top of the speckle floor)
+    # change statistics
+    cusum_k: float = 0.5               # Page allowance in sigma
+    cusum_h: float = 4.0               # Page decision interval in sigma
+    min_drop_db: float = 1.5           # HV must sit this far below reference to count as lost (JJ-FAST: 1.5-3.2 dB)
+    min_rise_db: float = 1.0           # HH rise of early-stage clearing (about +1.2 dB observed)
+    z_shift: float = 1.5               # an epoch is "shifted" when |z| >= this AND the dB floor below is met
+    shift_floor_db: float = 1.0
+    persist_epochs: int = 2            # consecutive usable epochs at the new level (manifest: 2-3)
+    ratio_drop_db: float = 1.0         # HV-HH ratio must fall this much for the early-stage channel (moisture raises both bands)
+    hv_not_rising_db: float = 0.5      # early-stage: HV may not rise more than this (rain raises HV, clearing does not)
+    # moisture
+    normalize_common_mode: bool = True # remove each epoch's tile-wide median offset (rain / soil moisture), JJ-FAST "temporal normalisation"
+    common_mode_flag_db: float = 0.7   # |offset| above this flags the epoch as moisture-affected
+    common_mode_cap_db: float = 3.0    # offsets beyond this are not corrected (the epoch is just unusable)
+    rain_flag_mm: float = 10.0         # IMERG: >= this over the 48 h up to the acquisition flags the epoch
+    max_wet_epoch_fraction: float = 0.5
+    # exclusions
+    slope_max_deg: float = 15.0        # JJ-FAST 4.0 steep-terrain mask
+    water_occurrence_max_pct: float = 25.0
+    builtup_max_pct: float = 10.0
+    tree_cover_min_pct: float = 30.0
+    hand_flood_prone_m: float = 3.0    # low HAND = flood-prone: kept, but flagged and needs HV confirmation
+    nonforest_k: float = 3.0           # pre-existing non-forest: reference HV below tile forest median - k*sigma (>= 2.5 dB)
+    min_forest_fraction: float = 0.02
+    min_valid_forest_fraction: float = 0.3
+    # patches
+    min_patch_ha: float = 0.5          # manifest
+    despeckle_px: int = 1              # majority filter window on the confirmed map (1 = off; multilooking already controls noise)
+    smooth_px: int = 3                 # boxcar multilook of the dB series before testing (mask-aware); 1 = off
+    refine_fraction: float = 0.5       # raw-resolution edge refinement keeps pixels whose own drop is at least this share of min_drop_db
+    patches_max: int = 50
+    hotspot_cell_m: float = 500.0
+    hotspot_top_n: int = 5
+    # null screen
+    null_draws: int = 8
+    null_margin: float = 3.0           # observed loss area must exceed this multiple of the largest null-draw area
+    # attribution
+    fire_buffer_m: float = 375.0       # VIIRS footprint
+    fire_window_days: float = 24.0
+    storm_max_distance_km: float = 300.0
+    storm_min_wind_kt: float = 34.0
+    storm_window_days: float = 36.0
+    abrupt_step_db: float = 2.0
+    rectangularity_min: float = 0.55
+    road_elongation_min: float = 4.0
+    road_max_width_m: float = 60.0
+    # corroboration
+    coherence_delta: float = 0.10
+    los_abs_min_m: float = 0.03        # ground motion that could be a landslide rather than clearing
+    los_k: float = 3.0
+    r7_overlap_min: float = 0.30
+    s4_patch_queries: int = 5
+    fetch_timeout_s: float = 30.0
+
+
+@dataclass(frozen=True)
 class RegistryCfg:
     max_workers: int | None = None   # None -> min(cpu_count - 1, 8), at least 1
     task_timeout_s: float = 900.0
@@ -179,7 +247,7 @@ class RegistryCfg:
     gate_min_epochs: bool = True     # synthesize INSUFFICIENT_EVIDENCE instead of launching a hopeless worker
     persist_bundles: bool = True     # content-addressed copy under <data>/bundles so workers can mmap it
     max_attempts: int = 2            # re-run a task that was only collateral damage of a pool recycle
-    min_epochs_metric: dict = field(default_factory=lambda: {"land_subsidence": "pairs_connected"})
+    min_epochs_metric: dict = field(default_factory=lambda: {"land_subsidence": "pairs_connected", "deforestation": "gcov_epochs"})
     fetch_for_unmodelled: bool = False  # False: only pipelines that have a run() decide which products are fetched / which steps run
 
 
@@ -187,7 +255,7 @@ _SECTIONS: dict[str, type] = {
     "grids": GridsCfg, "window": WindowCfg, "products": ProductsCfg, "clip": ClipCfg, "radar": RadarCfg,
     "decode": DecodeCfg, "geometry": GeometryCfg, "terrain": TerrainCfg, "temporal": TemporalCfg,
     "stable": StableCfg, "routing": RoutingCfg, "provenance": ProvenanceCfg, "earthquake": EarthquakeCfg,
-    "registry": RegistryCfg,
+    "deforestation": DeforestationCfg, "registry": RegistryCfg,
 }
 
 
@@ -206,6 +274,7 @@ class CommonConfig:
     routing: RoutingCfg = field(default_factory=RoutingCfg)
     provenance: ProvenanceCfg = field(default_factory=ProvenanceCfg)
     earthquake: EarthquakeCfg = field(default_factory=EarthquakeCfg)
+    deforestation: DeforestationCfg = field(default_factory=DeforestationCfg)
     registry: RegistryCfg = field(default_factory=RegistryCfg)
 
     def chain_params(self) -> dict:
@@ -213,6 +282,7 @@ class CommonConfig:
         d = dataclasses.asdict(self)
         d.pop("registry", None)
         d.pop("earthquake", None)          # pipeline parameters: they do not change what a bundle contains
+        d.pop("deforestation", None)
         return d
 
     def chain_params_json(self) -> str:
